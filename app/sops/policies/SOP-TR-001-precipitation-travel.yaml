@@ -1,5 +1,5 @@
 id: SOP-TR-001
-title: High precipitation probability affecting travel
+title: Rain heavy enough to slow a journey
 category: travel_commute
 severity: advisory
 override: false
@@ -8,21 +8,38 @@ applies_to:
   activities: [commute, driving, motorcycle, cycling, walking]
   intent_hint: "user is getting somewhere -- to work, to school, across town"
 
+# Keyed on how hard it is actually raining and how far you can see, not on the chance of
+# rain. Probability is a poor predictor of disruption: a 90% chance of drizzle delays
+# nobody, while a 40% chance that turns into a downpour closes a road. What slows traffic
+# is water on the surface and reduced sight lines, so the rule tests those directly.
+#
+# Two branches:
+#   - meaningful accumulation arriving alongside degraded visibility
+#   - visibility under 2 km on its own, which disrupts traffic whatever the cause
 match:
-  {field: precipitation_probability_pct, op: gte, value: 70}
+  any:
+    - all:
+        - {field: precipitation_mm, op: gte, value: 4}
+        - {field: visibility_km, op: lte, value: 5}
+    - {field: visibility_km, op: lte, value: 2}
 
 advice: |
-  Expect delays rather than danger. Rain at this probability is more likely than not to
-  affect the journey.
+  Expect the journey to be slower than usual rather than dangerous. There's enough water
+  coming down to sit on the road surface, and sight lines are shorter than normal.
 
-  Check for service alerts or traffic disruption before you leave, set off earlier than
-  usual, and take rain protection. If you're riding or walking, bear in mind that braking
-  distances lengthen and drivers see pedestrians later in the rain.
+  Set off earlier than you would otherwise, and check for service alerts or traffic
+  disruption before you leave rather than discovering them en route. Standing water
+  gathers first at underpasses and junctions, so those are where delays build.
+
+  If you're walking or riding, assume drivers will see you later than usual: wear
+  something visible, and give up right-of-way rather than insisting on it at crossings.
 
 compose_notes: >
-  Give the precipitation probability figure so the user can weigh it themselves.
+  State the visibility figure, and the rainfall amount where it contributed. Visibility
+  is the more concrete of the two for a user deciding whether to leave now or wait.
 
 rationale: >
-  A 70% probability is the point where planning around rain is the better default than
-  hoping to avoid it. This is a delay-and-preparation advisory, not a safety warning --
-  severity is set accordingly so it never outranks a genuine hazard.
+  Journey disruption tracks rainfall intensity and sight distance, not the probability of
+  any rain at all. Keying on probability produces an advisory on days nothing happens and
+  stays silent on days it does. Severity is deliberately advisory: this is a planning
+  matter, so it must never outrank a genuine hazard in the ranking.

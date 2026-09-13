@@ -1,5 +1,5 @@
 id: SOP-EX-003
-title: Strong wind while cycling or riding a two-wheeler
+title: Gusty crosswinds while riding two wheels
 category: outdoor_exercise
 severity: warning
 override: false
@@ -8,25 +8,40 @@ applies_to:
   activities: [cycling, motorcycle]
   intent_hint: "user is riding something with two wheels, pedal-powered or motorised"
 
+# Keyed on gust DIFFERENTIAL rather than raw wind speed, because that is what actually
+# unseats a rider. A steady 45 km/h headwind is exhausting but predictable: you lean into
+# it and it stays there. A 20 km/h prevailing wind with 55 km/h gusts is the dangerous
+# one, because the load arrives with no warning and from the side. Raw speed cannot tell
+# those apart, so a threshold on speed alone both misses the gusty-but-calm-average day
+# and over-warns on the steady-headwind day.
+#
+# Two branches:
+#   - a gust arriving 20+ km/h above the prevailing wind, once gusts clear 45
+#   - any gust at 65+, where the absolute force is enough regardless of differential
 match:
   any:
-    - {field: wind_speed_kmh, op: gte, value: 40}
-    - {field: wind_gusts_kmh, op: gte, value: 50}
+    - all:
+        - {field: gust_differential_kmh, op: gte, value: 20}
+        - {field: wind_gusts_kmh, op: gte, value: 45}
+    - {field: wind_gusts_kmh, op: gte, value: 65}
 
 advice: |
-  This is a safety risk rather than a comfort issue. Crosswinds and gusts at this
-  strength can move a rider out of their lane without warning -- the danger is the sudden
-  lateral shove, not the sustained headwind.
+  Today's wind is gusty rather than merely strong, and that is the part that matters on
+  two wheels. The danger is not the effort of riding into it -- it's the sideways shove
+  that arrives without warning and can put you across a lane before you react.
 
   Postpone the ride if you can, or take an enclosed vehicle or public transport instead.
-  If the ride is unavoidable: slow down, keep both hands on the bars, leave extra space
-  around larger vehicles, and take particular care on bridges, flyovers and open stretches
-  between buildings, where the gusts are strongest.
+  If you're riding anyway: slow down well below your usual pace, keep both hands on the
+  bars, and leave much more space around lorries and buses, whose wake adds to the gust.
+  Take particular care at the places gusts funnel or arrive suddenly -- bridges,
+  flyovers, gaps between buildings, and the moment you clear a line of trees.
 
 compose_notes: >
-  State the wind speed and gust figures.
+  Give the prevailing wind speed and the peak gust as two separate figures, so the user
+  can see the gap between them rather than just a single number.
 
 rationale: >
-  Sustained wind at 40 km/h or gusts at 50 km/h is sufficient to destabilise a loaded
-  two-wheeler, and gust-driven loss of control is a recognised single-vehicle crash
-  cause for riders.
+  Gust-induced loss of control is a recognised single-vehicle crash cause for riders, and
+  it tracks the gust-to-mean differential rather than mean wind speed. Encoding the
+  differential means the rule fires on the genuinely hazardous profile and stays quiet on
+  a strong but steady day, which a simple speed threshold cannot do.

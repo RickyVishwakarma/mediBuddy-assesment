@@ -34,6 +34,7 @@ SNAPSHOT_FIELDS = [
     "humidity_pct",
     "wind_speed_kmh",
     "wind_gusts_kmh",
+    "gust_differential_kmh",
     "uv_index",
     "precipitation_mm",
     "precipitation_probability_pct",

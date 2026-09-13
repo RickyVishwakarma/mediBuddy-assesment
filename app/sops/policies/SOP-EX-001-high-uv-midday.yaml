@@ -1,32 +1,50 @@
 id: SOP-EX-001
-title: High UV during the midday window
+title: Cumulative UV dose during sustained outdoor activity
 category: outdoor_exercise
 severity: caution
 override: false
 
+# Scoped to activities people stay out in for a while. UV harm is a dose -- intensity
+# multiplied by time -- so the activity matters as much as the reading. Ten minutes at
+# UV 8 is trivial; two hours at UV 6 is not.
 applies_to:
-  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor]
-  intent_hint: "user plans to exert themselves outdoors in daylight"
+  activities: [cycling, running, hiking, sports, gardening, walking]
+  intent_hint: "user plans to be outdoors and exposed for a sustained stretch"
 
-# window_start_hour / window_end_hour describe the span the user asked about, so this
-# tests "does the plan overlap 11:00-16:00" rather than "is it 11:00-16:00 right now".
+# Threshold sits at 6, not the 8 that marks the "very high" band, precisely because these
+# are sustained activities: the dose accumulates past the point a short errand would.
+#
+# Note there is deliberately NO clock-time condition here. Checking "is it between 11:00
+# and 16:00" is a proxy for "is the sun strong"; since the snapshot already computes the
+# UV index for the window the user actually asked about, the rule can test the thing
+# itself instead of the proxy. Ask about 19:00 and uv_index is low, so this stays quiet
+# without needing a rule about hours at all.
 match:
-  all:
-    - {field: uv_index, op: gte, value: 8}
-    - {field: window_start_hour, op: lte, value: 16}
-    - {field: window_end_hour, op: gte, value: 11}
+  any:
+    - {field: uv_index, op: gte, value: 6}
+    - {field: uv_max_24h, op: gte, value: 9}
 
 advice: |
-  Don't exercise outdoors unprotected between 11:00 and 16:00. If you're out in it, use
-  broad-spectrum sunscreen reapplied every two hours, a hat and UV-blocking sunglasses,
-  and take breaks in the shade.
+  The sun is strong enough that the length of your session matters more than the moment
+  you start it. Unprotected skin accumulates damage the whole time you're out, so a long
+  easy session in this can cost more than a short hard one.
 
-  Better still, move the session to early morning or after 16:00, once the UV index
-  drops. If it has to happen in that window, keep it short and stick to shaded routes.
+  Shorten the time exposed, or split it either side of the middle of the day. Broad
+  spectrum sunscreen on everything the kit doesn't cover, reapplied roughly every two
+  hours and again after heavy sweating, since it stops working well before it feels like
+  it has. A peaked cap and UV-blocking sunglasses do more than people expect -- eyes and
+  scalp are the spots regular exercisers most often skip.
+
+  Shade matters more than timing: a route with tree cover at UV 8 beats an exposed one at
+  UV 6. Reflected UV off water, sand and pale concrete adds meaningfully to the dose, so
+  waterside and open-paved routes are worse than they look.
 
 compose_notes: >
-  Quote the UV index figure so the user can judge it against the advice.
+  Quote the UV index for the window asked about. If the daily maximum drove the match
+  rather than the window reading, say so and name the quieter part of the day.
 
 rationale: >
-  A UV index of 8 or above is the WHO "very high" band, where unprotected skin can burn
-  within minutes and cumulative exposure risk is material for regular outdoor exercisers.
+  UV injury is cumulative rather than threshold-based, which is why this is scoped to
+  sustained activities and set lower than the "very high" band. Testing the windowed UV
+  reading rather than clock hours means the rule follows the actual sun, and keeps
+  working for a user asking about a winter afternoon or a tropical morning alike.

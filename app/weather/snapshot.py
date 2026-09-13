@@ -296,6 +296,17 @@ def build_snapshot(payload: dict, location: ResolvedLocation, window: str) -> We
     fields["humidity_pct"] = _num(current.get("relative_humidity_2m"))
     fields["cloud_cover_pct"] = _num(current.get("cloud_cover"))
 
+    # Gust differential: how much harder the peak gust hits than the prevailing wind.
+    # This is the figure that matters to a rider. A steady 45 km/h headwind is hard work
+    # but predictable; 20 km/h sustained with 55 km/h gusts is what actually puts someone
+    # across a lane, because the load arrives without warning. Raw wind speed alone
+    # cannot distinguish the two.
+    gust = fields.get("wind_gusts_kmh")
+    sustained = fields.get("wind_speed_kmh")
+    fields["gust_differential_kmh"] = (
+        round(gust - sustained, 1) if gust is not None and sustained is not None else None
+    )
+
     # --- time ---------------------------------------------------------------
     try:
         local_hour = datetime.fromisoformat(observed_at).hour

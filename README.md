@@ -78,12 +78,12 @@ asks for.
 | `SOP-SYS-001` | situational_override | danger | A heavy-rain system is active — **overrides everything** |
 | `SOP-TR-002` | travel_commute | danger | Thunderstorm in the asked-about window |
 | `SOP-EX-002` | outdoor_exercise | warning | Apparent temp ≥ 38 °C, or ≥ 33 °C with humidity ≥ 75% |
-| `SOP-EX-003` | outdoor_exercise | warning | Wind ≥ 40 km/h or gusts ≥ 50, on two wheels |
+| `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
 | `SOP-VG-001` | vulnerable_groups | warning | A child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
-| `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 8 and the plan overlaps 11:00–16:00 |
+| `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained outdoor activity |
 | `SOP-VG-002` | vulnerable_groups | caution | Older adult, apparent temp ≤ 5, or ≤ 12 with wind ≥ 30 |
 | `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky (pavement burns) |
-| `SOP-TR-001` | travel_commute | advisory | Precipitation probability ≥ 70% |
+| `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or visibility ≤ 2 km |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet today |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — an explicit all-clear |
 
@@ -113,6 +113,31 @@ The general principle: **aggregation lives in code, so a policy can name a _regi
 than a reading.** `build_snapshot` computes `rain_24h_mm`, `rain_class`, `rain_class_rank`
 and `heavy_rain_regime` from the raw payload; the policy then refers to those by name. No
 event, city or date is hardcoded anywhere.
+
+### Three rules where the obvious threshold is the wrong one
+
+Some of the most natural-sounding weather rules key on the wrong variable. Three of these
+deliberately don't:
+
+**Wind on two wheels — `SOP-EX-003` keys on gust *differential*, not wind speed.** A steady
+45 km/h headwind is exhausting but predictable; you lean into it and it stays there. A
+20 km/h prevailing wind gusting to 55 is the dangerous one, because the load arrives
+sideways with no warning. A threshold on raw speed cannot tell those apart — it
+over-warns on the steady day and stays silent on the genuinely hazardous one. The rule
+fires when gusts run 20 km/h above the prevailing wind (once gusts clear 45), or on
+absolute force at 65.
+
+**Travel rain — `SOP-TR-001` keys on intensity and visibility, not probability.** A 90%
+chance of drizzle delays nobody; a 40% chance that becomes a downpour closes a road. What
+actually slows a journey is water on the surface and shortened sight lines, so the rule
+tests those directly.
+
+**UV — `SOP-EX-001` keys on dose, and has no clock-time condition at all.** UV harm is
+intensity × time, so the rule is scoped to sustained activities and set at 6 rather than
+the "very high" 8. And checking "is it between 11:00 and 16:00" is only ever a *proxy* for
+"is the sun strong" — since the snapshot already computes UV for the window the user asked
+about, the rule tests the thing itself. Ask about 19:00 and `uv_index` is low, so it stays
+quiet without needing any rule about hours.
 
 ### The fuzzy policy
 
