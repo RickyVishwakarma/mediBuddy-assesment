@@ -13,7 +13,7 @@ the model's judgement**.
 |---|---|
 | Setup + run, backend and frontend | [Quick start](#quick-start) |
 | SOPs, and why this form | [`app/sops/policies/`](app/sops/policies/) · [why](#the-sops) |
-| LangGraph implementation | [`app/graph/`](app/graph/) · [architecture](#architecture) |
+| LangGraph implementation | [`app/graph/`](app/graph/) · **[LANGGRAPH.md](LANGGRAPH.md)** |
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
@@ -165,6 +165,9 @@ graph TD
 The **cycle** is what a chain cannot express: retry under a stricter prompt, and on a
 second failure leave by a different exit. Termination is bounded by `compose_attempts` in
 state.
+
+**[LANGGRAPH.md](LANGGRAPH.md)** covers the implementation in full — state channels and
+reducers, routing, the cycle, the checkpointer, and how to read a trace.
 
 ### Deterministic code vs. the model
 
