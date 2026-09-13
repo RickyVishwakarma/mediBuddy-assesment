@@ -70,6 +70,11 @@ adding a rule the same thing as adding a file.
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
 
+**Every one of the 13 carries its own `rationale` field** explaining why that threshold,
+on that variable, at that severity — so the reasoning sits next to the rule rather than in
+a document that can drift from it. The four highlighted below are the ones whose reasoning
+generalises; the rest explain themselves in their files.
+
 ### The situational override
 
 Open-Meteo doesn't publish "a low-pressure system exists", so `SOP-SYS-001` matches its
@@ -90,9 +95,10 @@ but the situation is. **Aggregation lives in code so a policy can name a _regime
 than a reading** — `build_snapshot` derives `rain_class`, `heavy_rain_regime` and friends,
 and the rule refers to them. No event, city or date is hardcoded anywhere.
 
-### Three rules that key on the causal variable
+### Three more that key on the causal variable
 
-The obvious threshold is often a proxy for the hazard rather than its cause:
+The obvious threshold is often a proxy for the hazard rather than its cause. These three
+were rewritten to test the cause instead:
 
 - **`SOP-EX-003` — gust differential, not wind speed.** A steady 45 km/h headwind is
   predictable; 20 km/h gusting to 55 is what puts a rider across a lane.
