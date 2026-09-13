@@ -86,7 +86,7 @@ asks for.
 | `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky (pavement burns) |
 | `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or visibility ≤ 2 km |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet today |
-| `SOP-GEN-001` | general_conditions | info | Nothing notable — an explicit all-clear |
+| `SOP-GEN-001` | general_conditions | info | Nothing notable — an explicit all-clear (`only_if_alone`) |
 
 ### The situational override — the case the brief cares most about
 
@@ -300,6 +300,13 @@ When several policies apply, [`engine.py`](app/sops/engine.py) sorts by:
 **The top policy leads the answer; up to two others get a sentence each; all of them appear
 in `citations`.**
 
+One exception, and it exists because of a real bug. A policy marked `only_if_alone` — the
+all-clear — is dropped as soon as anything else matches. It asserts that *nothing notable
+was found*, so cited beneath a warning it makes the reply contradict itself: "postpone the
+ride", then "nothing notable, go ahead as planned". That happened, because the all-clear
+tests sustained wind and not gusts. The fix is the flag rather than copying gust
+thresholds into the all-clear, since that would couple it to every policy added afterwards.
+
 Why not just pick one: suppressing a second genuine hazard is a safety regression — if it's
 both high-UV and high-wind, the rider needs both. Why not list them equally: five equal
 warnings means none of them gets acted on. So: one clear instruction, briefly qualified,
@@ -454,12 +461,12 @@ The other two cover fabricated-policy confirmation and classic instruction overr
 
 Worth stating plainly, because it qualifies how much the green run above is worth.
 
-Five real defects surfaced while building this. **The eval suite found one of them.** The
-other four came from probing by hand: feeding the guard a deliberately fabricated reply,
-reading the deterministic fallback's actual output, and asking the bot ordinary follow-up
-questions in the chat UI — "what about this evening?" and "at night?" each exposed a
-different bug. All five are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md), and each now
-has a case guarding it.
+Six real defects surfaced while building this. **The eval suite found one of them.** The
+other five came from deliberately probing the system: feeding the guard a fabricated
+reply, reading the deterministic fallback's actual output, asking ordinary follow-up
+questions in the chat UI ("what about this evening?" and "at night?" each exposed a
+different bug), and auditing the policy set for rules that contradict each other. All six
+are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md), and each now has a case guarding it.
 
 The most serious — one window's weather leaking into another, producing a danger-severity
 lightning warning for a storm-free evening — is the clearest illustration of the limit. No

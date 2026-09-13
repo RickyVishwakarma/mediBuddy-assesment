@@ -171,8 +171,15 @@ def select(matches: list[MatchedSOP], max_secondary: int = 2) -> tuple[MatchedSO
 
     We surface more than one because suppressing a second genuine hazard is a safety
     regression -- but only one leads, because a list of equal warnings gets ignored.
+
+    Rules flagged `only_if_alone` assert that nothing notable was found, so they are
+    dropped as soon as something else matched. Without this the all-clear gets listed
+    under a warning and the reply contradicts itself: "postpone the ride" followed by
+    "nothing notable, go ahead as planned".
     """
     if not matches:
         return None, []
-    ordered = rank(matches)
+
+    substantive = [m for m in matches if not m.sop.only_if_alone]
+    ordered = rank(substantive if substantive else matches)
     return ordered[0], ordered[1 : 1 + max_secondary]

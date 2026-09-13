@@ -248,6 +248,19 @@ cases:
     mode: unit
     check: policy_validation
 
+  - id: no_contradiction
+    checking: >
+      The all-clear policy must never be cited beside a hazard. It asserts that nothing
+      notable was found, so listing it under a warning makes the reply contradict itself
+      -- and the deterministic fallback prints secondary advice verbatim, so a user would
+      read both. Found for real: the all-clear checks sustained wind but not gusts, so a
+      gusty day satisfied it while the wind rule was warning about exactly those gusts.
+    pass_means: >
+      On a benign day SOP-GEN-001 leads. On a gusty day SOP-EX-003 leads and SOP-GEN-001
+      appears nowhere in the citations.
+    mode: unit
+    check: no_contradiction
+
   - id: conflict_resolution
     checking: >
       When several policies genuinely apply, the documented order decides: an override

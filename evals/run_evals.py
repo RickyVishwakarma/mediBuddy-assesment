@@ -92,10 +92,11 @@ produces an embarrassing tone; a confidently wrong *number* is what a user actua
 on. `adversarial_numeric_coercion` is therefore the case aimed at the guarantee the whole
 design exists to protect. Injection and fabricated-policy confirmation are also covered.
 
-**Five real defects found while building this, all since fixed.** They are recorded
+**Six real defects found while building this, all since fixed.** They are recorded
 because "the suite passed" is only meaningful if it was capable of failing. Note that only
-one of the five was found by this suite; the rest came from probing by hand and from using
-the chat UI -- which is the honest argument for doing both:
+one of the six was found by this suite; the rest came from probing by hand, from using the
+chat UI, and from auditing the policy set directly -- which is the honest argument for
+doing all of them:
 
 1. *A hallucinated figure passed the grounding guard.* An earlier guard allowed a fixed
    list of "prose" numbers (15, 20, 30, 45, 60, 90) so phrases like "wait 30 minutes"
@@ -135,6 +136,20 @@ the chat UI -- which is the honest argument for doing both:
    two window lists cannot drift apart again. The difference is not cosmetic: for the
    location tested, evening carried a 95% chance of rain and the night 76%, which is a
    different answer to the same question.
+
+6. *The all-clear contradicted the hazard rules.* SOP-GEN-001 asserts that nothing
+   notable was found, but it tests sustained wind and not gusts -- so a day with 25 km/h
+   prevailing wind and 55 km/h gusts satisfied it while SOP-EX-003 was warning about
+   exactly those gusts. Cited together, the reply reads "postpone the ride" followed by
+   "nothing notable, go ahead as planned", and the deterministic fallback prints secondary
+   advice verbatim, so a user would see both. It was live in the recorded Wellington
+   fixture the whole time.
+
+   The obvious fix -- add a gust threshold to the all-clear -- is the wrong one: it would
+   have to mirror every hazard rule, and every new policy would mean editing it, which is
+   the coupling the policy directory exists to remove. Instead the rule now declares
+   `only_if_alone: true`, and ranking drops such rules whenever anything else matched.
+   One flag, in YAML, correct no matter what is added later.
 
 **What the numeric guard does not cover.** Defect 4, and a related one where the model
 asserted "the storm covers only part of today" from a snapshot holding nothing but a
@@ -433,9 +448,65 @@ advice: fine
     return problems
 
 
+def check_no_contradiction() -> list[str]:
+    """The all-clear must never be cited beside a hazard.
+
+    SOP-GEN-001 asserts that nothing notable was found. Cited under a warning it produces
+    a reply that contradicts itself -- "postpone the ride" followed by "nothing notable,
+    go ahead as planned" -- and the deterministic fallback prints secondary advice
+    verbatim, so a user would read both.
+
+    It happened for real: GEN-001 checks sustained wind but not gusts, so a day with
+    25 km/h prevailing and 55 km/h gusts satisfied it while SOP-EX-003 was warning about
+    exactly those gusts. Fixed with `only_if_alone` rather than by copying gust
+    thresholds into GEN-001, which would have coupled it to every future policy.
+    """
+    from app.sops.engine import match_policies, select
+    from app.sops.loader import load_policies
+    from app.weather.openmeteo import ResolvedLocation
+    from app.weather.snapshot import WeatherSnapshot
+
+    pol = load_policies()
+    loc = ResolvedLocation("T", "", None, 0.0, 0.0, "UTC")
+    base = dict(
+        temperature_c=22.0, apparent_temperature_c=22.0, humidity_pct=50.0,
+        wind_speed_kmh=8.0, wind_gusts_kmh=12.0, gust_differential_kmh=4.0,
+        uv_index=3.0, precipitation_mm=0.0, precipitation_probability_pct=5.0,
+        visibility_km=20.0, window="morning", window_start_hour=6, window_end_hour=11,
+        rain_24h_mm=0.0, gust_peak_24h_kmh=14.0, temp_min_24h_c=14.0, uv_max_24h=4.0,
+        rain_class="none", rain_class_rank=0, heavy_rain_regime=False,
+        thunderstorm_in_window=False, clear_sky=True, comfort_index=88,
+    )
+
+    def snap(**over):
+        f = dict(base)
+        f.update(over)
+        return WeatherSnapshot(loc, f["window"], "2026-09-13T10:00", f)
+
+    problems: list[str] = []
+    alone = [m.sop.id for m in [select(match_policies(pol, snap(), "cycling"))[0]] if m]
+    if alone != ["SOP-GEN-001"]:
+        problems.append(f"on a benign day the all-clear should lead, got {alone}")
+
+    # The real profile that exposed this: light prevailing wind, heavy gusts.
+    gusty = snap(wind_speed_kmh=25.0, wind_gusts_kmh=55.0, gust_differential_kmh=30.0,
+                 gust_peak_24h_kmh=55.0)
+    lead, sec = select(match_policies(pol, gusty, "cycling"))
+    cited = [m.sop.id for m in ([lead] if lead else []) + sec]
+    if "SOP-GEN-001" in cited:
+        problems.append(
+            f"the all-clear was cited beside a hazard: {cited} -- the reply would say "
+            "'postpone the ride' and 'nothing notable, go ahead' together"
+        )
+    if lead is None or lead.sop.id != "SOP-EX-003":
+        problems.append(f"expected the gust warning to lead, got {cited}")
+    return problems
+
+
 UNIT_CHECKS = {
     "window_isolation": check_window_isolation,
     "policy_validation": check_policy_validation,
+    "no_contradiction": check_no_contradiction,
 }
 
 

@@ -4,6 +4,12 @@ category: general_conditions
 severity: info
 override: false
 
+# This rule asserts that nothing notable was found, so it cannot sit beside a hazard
+# without contradicting it. Dropped automatically whenever any other policy matched.
+# That is deliberately NOT done by copying every hazard threshold into the conditions
+# below -- doing so would mean editing this file every time a policy is added.
+only_if_alone: true
+
 applies_to:
   activities: ["*"]
   intent_hint: "any outdoor plan on a day with nothing notable in the forecast"

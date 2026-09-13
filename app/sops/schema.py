@@ -118,6 +118,15 @@ class SOP(BaseModel):
     category: str
     severity: Literal["info", "advisory", "caution", "warning", "danger"]
     override: bool = False
+
+    # For rules that assert an ABSENCE of findings -- the all-clear. Such a rule cannot
+    # be listed beside a hazard without contradicting it ("postpone the ride" next to
+    # "nothing notable, go ahead"), so it is dropped whenever anything else matched.
+    #
+    # This is why the all-clear does not simply carry a copy of every hazard threshold:
+    # that would mean editing it every time a new policy is added, which is exactly the
+    # coupling the policy directory exists to avoid. The flag states the intent instead.
+    only_if_alone: bool = False
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
     match: dict[str, Any]
 
