@@ -71,12 +71,13 @@ file per rule means two people can edit two policies without a merge conflict, a
 discovery means adding a rule is adding a file — which is exactly the property the brief
 asks for.
 
-11 policies across 6 categories, spanning all five severities:
+12 policies across 6 categories, spanning all five severities:
 
 | ID | Category | Severity | Fires when |
 |---|---|---|---|
 | `SOP-SYS-001` | situational_override | danger | A heavy-rain system is active — **overrides everything** |
 | `SOP-TR-002` | travel_commute | danger | Thunderstorm in the asked-about window |
+| `SOP-TR-003` | travel_commute | danger | Rain onto ground at or below freezing — ice risk |
 | `SOP-EX-002` | outdoor_exercise | warning | Apparent temp ≥ 38 °C, or ≥ 33 °C with humidity ≥ 75% |
 | `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
 | `SOP-VG-001` | vulnerable_groups | warning | A child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
@@ -174,6 +175,21 @@ That's the whole procedure.
 It works because the snapshot exposes a **fixed, documented vocabulary** that new rules draw
 from — listed in [`app/vocabulary.py`](app/vocabulary.py) — rather than each rule needing its
 own plumbing. A policy author needs that file and nothing else.
+
+**Field names are validated at load time.** A rule referring to a field that doesn't exist
+would be accepted happily and then never fire, because an absent field evaluates to false —
+a safety rule that looks live but is dead, which is the worst failure this system has. So
+the loader rejects unknown fields outright and suggests the nearest real one:
+
+```
+SOPValidationError: match: unknown snapshot field 'temperature_celsius'.
+A rule referring to a field that does not exist would never fire.
+Did you mean: temperature_c, apparent_temperature_c?
+See app/vocabulary.py for the full list.
+```
+
+That check exists because this is the mistake a policy author working without the Python is
+most likely to make, and silence would be the worst possible response to it.
 
 ```yaml
 # app/sops/policies/SOP-XX-001-my-new-rule.yaml

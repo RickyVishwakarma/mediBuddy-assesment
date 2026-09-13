@@ -7,10 +7,13 @@ failure mode this system has.
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.vocabulary import SNAPSHOT_FIELDS
 
 # Ordered least -> most severe. Index is the rank used when ranking matches.
 SEVERITY_ORDER = ["info", "advisory", "caution", "warning", "danger"]
@@ -55,6 +58,21 @@ def _validate_condition(node: Any, path: str = "match") -> None:
         return
 
     if "field" in keys:
+        # Reject unknown field names at load time. Without this a typo -- say
+        # `temperature_celsius` for `temperature_c` -- is accepted happily and the rule
+        # then never fires, because an absent field evaluates to False. A safety policy
+        # that looks live but is dead is the worst outcome this system has, and it is
+        # exactly the mistake a policy author working without the Python would make.
+        name = node["field"]
+        if name not in SNAPSHOT_FIELDS:
+            close = difflib.get_close_matches(str(name), SNAPSHOT_FIELDS, n=3, cutoff=0.5)
+            hint = f" Did you mean: {', '.join(close)}?" if close else ""
+            raise SOPValidationError(
+                f"{path}: unknown snapshot field {name!r}. A rule referring to a field "
+                f"that does not exist would never fire.{hint} "
+                f"See app/vocabulary.py for the full list."
+            )
+
         op = node.get("op")
         if op not in LEAF_OPS:
             raise SOPValidationError(

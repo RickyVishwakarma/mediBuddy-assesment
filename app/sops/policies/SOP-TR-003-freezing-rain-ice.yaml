@@ -1,0 +1,39 @@
+id: SOP-TR-003
+title: Ice risk where rain meets freezing ground
+category: travel_commute
+severity: danger
+override: false
+
+applies_to:
+  activities: [commute, driving, motorcycle, cycling, walking, running, pet_walk]
+  intent_hint: "user is travelling or on foot while temperatures sit at or below freezing"
+
+match:
+  all:
+    - {field: temp_min_24h_c, op: lte, value: 0}
+    - {field: precipitation_mm, op: gte, value: 0.2}
+    - {field: temperature_c, op: lte, value: 3}
+
+advice: |
+  Rain falling onto ground at or below freezing is the worst surface condition there is,
+  and it does not look dangerous until you are already on it. Black ice forms first on
+  bridges, overpasses and shaded stretches, because they lose heat from underneath.
+
+  Delay the journey if it can wait. If it cannot: leave far more stopping distance than
+  feels necessary, brake and steer gently and separately rather than together, and expect
+  the road to be worst where it looks wettest. On two wheels, this is the one condition
+  where the honest advice is not to ride at all -- there is no technique that recovers a
+  bike once the tyres let go on ice.
+
+  On foot, keep to gritted paths, shorten your stride, and take particular care stepping
+  off kerbs and in car parks, which are rarely treated.
+
+compose_notes: >
+  State the temperature and the overnight minimum, so the user can see that the ground
+  may be colder than the air reading suggests.
+
+rationale: >
+  Freezing rain is a compound hazard: neither the temperature nor the precipitation is
+  remarkable alone, but together they produce a surface with almost no available grip.
+  Severity is danger rather than warning because the failure mode is a total loss of
+  control with no warning and no recovery.

@@ -71,6 +71,22 @@ the real matching engine over candidate days and keeping one where the intended 
 actually leads. A fixture that stopped exercising its policy would fail to record rather
 than quietly pass.
 
+**Nothing about any weather event is hardcoded.** Checked across all five files that
+decide an answer -- `engine.py`, `snapshot.py`, `openmeteo.py`, `nodes.py`,
+`grounding.py` -- none contains a city name, and the only numeric literals in the
+matching engine are loop constants. The single set of weather constants in code is the
+IMD 24h rainfall classification, which is a published standard rather than a reading from
+any particular day. Every threshold that decides an answer lives in a YAML policy file.
+
+**The paraphrase cases were measured, not assumed.** Comparing each paraphrased question
+against its target policy's full text, `paraphrase_wind` shares only "across, around,
+two, wheels" with SOP-EX-003, and `paraphrase_uv` shares only "one, sun" with SOP-EX-001
+-- where "one" is simply "one o'clock". Neither question contains any word from the
+rule's trigger vocabulary: no wind, gust, safe, cycling, bike, UV, index or sunscreen.
+The policies' match conditions share no vocabulary with the questions at all; the only
+lexical link is "two wheels" resolving to the `cycling` activity, which is what activity
+scoping exists to do.
+
 **Why numeric coercion is the adversarial case I weight highest.** Prompt injection
 produces an embarrassing tone; a confidently wrong *number* is what a user actually acts
 on. `adversarial_numeric_coercion` is therefore the case aimed at the guarantee the whole
@@ -331,7 +347,60 @@ def check_window_isolation() -> list[str]:
     return problems
 
 
-UNIT_CHECKS = {"window_isolation": check_window_isolation}
+def check_policy_validation() -> list[str]:
+    """A policy referring to a field that does not exist must be rejected at load time.
+
+    Without this, a typo like `temperature_celsius` for `temperature_c` loads happily and
+    the rule then never fires, because an absent field evaluates to False. A safety rule
+    that looks live but is dead is the worst failure this system has, and it is exactly
+    the mistake someone editing YAML without reading the Python would make.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from app.sops.loader import load_policies
+    from app.sops.schema import SOPValidationError
+
+    good = """
+id: SOP-OK-001
+title: Valid rule
+category: test
+severity: info
+applies_to: {activities: ["*"]}
+match: {field: temperature_c, op: gte, value: 30}
+advice: fine
+"""
+    typo = good.replace("temperature_c,", "temperature_celsius,").replace(
+        "SOP-OK-001", "SOP-BAD-001"
+    )
+
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "ok.yaml").write_text(good, encoding="utf-8")
+        try:
+            load_policies(Path(d), use_cache=False)
+        except SOPValidationError as exc:
+            problems.append(f"a valid policy was rejected: {exc}")
+
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "bad.yaml").write_text(typo, encoding="utf-8")
+        try:
+            load_policies(Path(d), use_cache=False)
+            problems.append(
+                "a policy naming a non-existent snapshot field was ACCEPTED -- it would "
+                "load cleanly and then silently never fire"
+            )
+        except SOPValidationError as exc:
+            if "temperature_c" not in str(exc):
+                problems.append("rejected, but without suggesting the correct field name")
+
+    return problems
+
+
+UNIT_CHECKS = {
+    "window_isolation": check_window_isolation,
+    "policy_validation": check_policy_validation,
+}
 
 
 def run_case(case: dict) -> dict:

@@ -234,6 +234,17 @@ cases:
     mode: unit
     check: window_isolation
 
+  - id: policy_validation
+    checking: >
+      A policy file naming a snapshot field that does not exist must be rejected when it
+      loads, not accepted and then silently never fire. Guards the "add a policy without
+      touching code" path against its most likely mistake -- a mistyped field name.
+    pass_means: >
+      A valid policy loads. A policy naming a non-existent field raises
+      SOPValidationError, and the message suggests the correct field name.
+    mode: unit
+    check: policy_validation
+
   - id: conflict_resolution
     checking: >
       When several policies genuinely apply, the documented order decides: an override
