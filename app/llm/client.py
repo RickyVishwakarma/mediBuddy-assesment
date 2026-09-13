@@ -44,14 +44,39 @@ _RETRYABLE = (
     "Server disconnected", "getaddrinfo", "Connection", "ConnectError",
     "ReadTimeout", "ConnectTimeout", "RemoteProtocolError", "Temporary failure",
 )
-_RETRY_DELAY_RE = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
+_RETRY_DELAY_RE = re.compile(r"retry in ([\d.]+)\s*s\b", re.IGNORECASE)
+_RETRY_DELAY_MS_RE = re.compile(r"retry in ([\d.]+)\s*ms\b", re.IGNORECASE)
+
+# Below this, the server is throttling us for a moment rather than refusing us for the
+# day, and waiting is obviously right.
+_SHORT_RETRY_SECONDS = 10.0
+
+
+def _server_retry_hint(message: str) -> float | None:
+    """Seconds the server asked us to wait, if it said. Milliseconds are checked first --
+    "retry in 768ms" also contains the substring a seconds-pattern would match."""
+    ms = _RETRY_DELAY_MS_RE.search(message)
+    if ms:
+        return float(ms.group(1)) / 1000.0
+    sec = _RETRY_DELAY_RE.search(message)
+    return float(sec.group(1)) if sec else None
 
 
 def _is_retryable(error: Exception) -> bool:
     message = str(error)
-    # A per-DAY quota is not worth waiting out: the server still sends a ~60s retry hint
-    # for it, but the budget will not come back this run. Fail fast and honestly instead
-    # of sleeping through several minutes for a result that cannot arrive.
+    hint = _server_retry_hint(message)
+
+    # Trust the server's own hint over the name of the quota it cites. Gemini returns
+    # quotaId "GenerateRequestsPerDayPerProjectPerModel-FreeTier" for a momentary throttle
+    # as well as for a spent daily budget, so keying on "PerDay" made us abandon a call
+    # the same response was telling us to retry in 768 milliseconds -- and the user saw
+    # "I'm having trouble processing that request" for a wait shorter than a page load.
+    if hint is not None and hint <= _SHORT_RETRY_SECONDS:
+        return any(marker in message for marker in _RETRYABLE)
+
+    # No hint, or a long one: a per-day budget will not come back during this request, so
+    # fail fast and honestly rather than sleeping through minutes for a result that
+    # cannot arrive.
     if "PerDay" in message or "per day" in message.lower():
         return False
     return any(marker in message for marker in _RETRYABLE)
@@ -59,9 +84,9 @@ def _is_retryable(error: Exception) -> bool:
 
 def _retry_delay(error: Exception, attempt: int) -> float:
     """Honour the server's own retry hint when it gives one, else exponential backoff."""
-    match = _RETRY_DELAY_RE.search(str(error))
-    if match:
-        return min(float(match.group(1)) + 1.0, 65.0)
+    hint = _server_retry_hint(str(error))
+    if hint is not None:
+        return min(hint + 1.0, 65.0)
     return min(2.0**attempt + random.uniform(0, 1), 65.0)
 
 
