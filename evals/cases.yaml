@@ -274,6 +274,19 @@ cases:
     mode: unit
     check: claim_grounding
 
+  - id: docs_match_code
+    checking: >
+      The write-ups do not assert counts the code contradicts, every policy appears in the
+      README's table, and no documentation link is broken. This drifted once already --
+      the README's state line said "17 eval cases, 16 passed" after an eighteenth was
+      added.
+    pass_means: >
+      Policy count, node count and terminal count in the docs match the compiled graph and
+      the policy directory; the README table and the policy directory list the same ids;
+      every file link resolves.
+    mode: unit
+    check: docs_match_code
+
   - id: conflict_resolution
     checking: >
       When several policies genuinely apply, the documented order decides: an override

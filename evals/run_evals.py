@@ -535,11 +535,70 @@ def check_claim_grounding() -> list[str]:
     return problems
 
 
+def check_docs_match_code() -> list[str]:
+    """The write-ups must not assert counts the code contradicts.
+
+    A README claiming 13 policies next to a directory holding 14 is a small lie, and the
+    reviewer is precisely the person who will check. This drifted once already: the state
+    line said "17 eval cases, 16 passed" after an eighteenth was added. Volatile figures
+    (run results) were moved out of prose entirely; the structural ones are asserted here
+    so they cannot rot silently.
+    """
+    from app.graph.build import GRAPH
+    from app.guards.claims import CHECKS
+    from app.sops.loader import load_policies
+
+    root = Path(__file__).resolve().parent.parent
+    pol = load_policies()
+    graph = GRAPH.get_graph()
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    langgraph = (root / "LANGGRAPH.md").read_text(encoding="utf-8")
+
+    facts = {
+        "policies": len(pol),
+        "nodes": len([n for n in graph.nodes if not n.startswith("__")]),
+        "branch points": len({e.source for e in graph.edges if e.conditional}),
+        "terminals": len({e.source for e in graph.edges if e.target == "__end__"}),
+        "claim checks": len(CHECKS),
+    }
+    problems: list[str] = []
+
+    for doc_name, doc, pattern, key in [
+        ("README.md", readme, r"\*\*State:\*\*\s*(\d+)\s*policies", "policies"),
+        ("LANGGRAPH.md", langgraph, r"\*\*Shape:\*\*\s*(\d+)\s*nodes", "nodes"),
+        ("LANGGRAPH.md", langgraph, r"(\d+)\s*terminal paths", "terminals"),
+    ]:
+        found = re.search(pattern, doc)
+        if not found:
+            problems.append(f"{doc_name}: expected an assertion matching /{pattern}/")
+        elif int(found.group(1)) != facts[key]:
+            problems.append(
+                f"{doc_name} says {found.group(1)} {key}, code has {facts[key]}"
+            )
+
+    # Every policy in the directory must appear in the README's table, and vice versa.
+    listed = set(re.findall(r"\|\s*`(SOP-[A-Z]+-\d+)`", readme))
+    real = {p.id for p in pol}
+    if real - listed:
+        problems.append(f"README policy table is missing {sorted(real - listed)}")
+    if listed - real:
+        problems.append(f"README policy table lists non-existent {sorted(listed - real)}")
+
+    # Every file the docs link to must exist.
+    for doc_name, doc in (("README.md", readme), ("LANGGRAPH.md", langgraph)):
+        for link in re.findall(r"\]\(([^)#][^)]*)\)", doc):
+            if not link.startswith("http") and not (root / link.rstrip("/")).exists():
+                problems.append(f"{doc_name}: broken link -> {link}")
+
+    return problems
+
+
 UNIT_CHECKS = {
     "window_isolation": check_window_isolation,
     "policy_validation": check_policy_validation,
     "no_contradiction": check_no_contradiction,
     "claim_grounding": check_claim_grounding,
+    "docs_match_code": check_docs_match_code,
 }
 
 

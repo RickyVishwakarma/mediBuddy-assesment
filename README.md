@@ -17,7 +17,10 @@ the model's judgement**.
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-**State:** 13 policies · 17 eval cases · last run **16 passed, 0 failed, 1 skipped**.
+**State:** 13 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
+and the notes on what the suite missed — are generated into
+**[EVAL_RESULTS.md](EVAL_RESULTS.md)** by `python evals/run_evals.py`; that file is the
+source of truth rather than a number copied into this one.
 
 ---
 
