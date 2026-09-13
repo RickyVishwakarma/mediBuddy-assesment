@@ -37,6 +37,13 @@ uvicorn server.main:app --reload
 
 Open **http://localhost:8000**.
 
+**Deployed** — [`render.yaml`](render.yaml) is a Render blueprint: connect the repo, set
+`GOOGLE_API_KEY` in the dashboard, deploy. It runs as one long-lived process rather than
+on a serverless target, because session memory lives in LangGraph's in-process
+`MemorySaver` — a function that cold-starts between turns would lose the conversation and
+break the follow-up behaviour. On the free plan the service sleeps after inactivity, so
+the first request after a quiet spell takes about a minute to wake.
+
 **Backend** — FastAPI on 8000. `GET /` serves the UI · `POST /chat` takes
 `{session_id, message}` and returns `{reply, citations, no_guidance, failed, trace}` ·
 `GET /policies` lists the loaded rules.

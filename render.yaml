@@ -1,0 +1,17 @@
+# Render blueprint. The app is a single long-running process on purpose: session memory
+# lives in LangGraph's in-process MemorySaver, so a serverless target would lose a
+# conversation between turns and break the follow-up behaviour the brief asks for.
+services:
+  - type: web
+    name: weather-advisory-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Never committed. Set in the Render dashboard; `sync: false` makes Render prompt
+      # for it rather than look for it in this file.
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.10"
