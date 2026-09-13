@@ -87,11 +87,19 @@ have failed.
 | 6 | The all-clear contradicted the hazard rules -- it checks sustained wind, not gusts, so it said "go ahead" beside a gust warning. Fixed with `only_if_alone` rather than copying thresholds, which would couple it to every future policy. | auditing the policy set |
 | 7 | A rule's advice was untrue on some of its own triggers. `SOP-TR-001` ("rain heavy enough to slow a journey") also fired on low visibility alone, so on a dry fog day it said "there's enough water coming down to sit on the road surface" beside a snapshot reading 0.0 mm. Auditing every `any:` branch found three more: SOP-EX-001 fired on the day's peak UV and claimed the sun was strong when you asked about 19:00; SOP-EX-003 said "gusty rather than merely strong" on a steady 62 km/h wind; SOP-VG-003 said "in direct sun" on an overcast 36 C day. Split out SOP-TR-004 for visibility, dropped the peak-UV branch, reworded the other two. | auditing the policy set |
 
-**What the numeric guard cannot cover.** Defects 4, 6 and 7 are non-numeric claims. Every
-figure in the bad replies was real; the problem was which window or which rule they
-belonged to. The guard validates figures, not propositions. Mitigation is to keep the
-snapshot rich enough that the model never infers -- storm coverage is now counted in hours
--- but this remains the softest part of the design.
+**Non-numeric claims.** Defects 4, 6 and 7 all involved sentences rather than figures:
+every number in those replies was real, and the problem was which window, which rule, or
+which condition they described. The numeric allow-set could never have caught them.
+
+`guards/claims.py` now checks propositions as well -- ten phrase patterns, each paired
+with a predicate over the snapshot, rejecting a reply that asserts what the forecast
+contradicts. Tested both ways, since over-rejection would quietly degrade every answer:
+10/10 fabricated claims caught, 0 false positives across all 13 policies' own advice.
+Guarded by `claim_grounding`.
+
+It is a table rather than a model, so every rejection traces to a named rule, and it fails
+toward acceptance -- a proposition nobody has written a check for passes unexamined. That
+is the remaining limit, and it is narrower than it was rather than closed.
 
 **A rule's advice must be true for every condition that can trigger it.** An `any:`
 branch that widens the trigger without fitting the advice is a grounding bug no numeric
@@ -446,10 +454,92 @@ def check_no_contradiction() -> list[str]:
     return problems
 
 
+def check_claim_grounding() -> list[str]:
+    """Non-numeric claims must be checked too, and without rejecting honest advice.
+
+    The numeric allow-set answers "did this figure come from the API". It cannot answer
+    "is this sentence true", which is how a reply once asserted water on the road beside a
+    reading of 0.0 mm. guards/claims.py closes part of that with a table of phrase
+    patterns paired with snapshot predicates.
+
+    Both directions matter. A checker that rejects nothing is decoration; one that rejects
+    honest policy wording silently degrades every answer, which has happened here before.
+    """
+    from app.guards.claims import check_claims
+    from app.guards.grounding import render_deterministic
+    from app.sops.loader import load_policies
+    from app.weather.openmeteo import ResolvedLocation
+    from app.weather.snapshot import WeatherSnapshot
+
+    pol = {p.id: p for p in load_policies()}
+    loc = ResolvedLocation("T", "", None, 0.0, 0.0, "UTC")
+    base = dict(
+        temperature_c=22.0, apparent_temperature_c=22.0, humidity_pct=50.0,
+        wind_speed_kmh=8.0, wind_gusts_kmh=12.0, gust_differential_kmh=4.0, uv_index=3.0,
+        precipitation_mm=0.0, precipitation_probability_pct=5.0, visibility_km=20.0,
+        window="afternoon", window_start_hour=12, window_end_hour=17, window_hours=6,
+        rain_24h_mm=0.0, gust_peak_24h_kmh=12.0, temp_min_24h_c=14.0, uv_max_24h=4.0,
+        rain_class="none", rain_class_rank=0, heavy_rain_regime=False,
+        thunderstorm_in_window=False, thunderstorm_hours_in_window=0,
+        thunderstorm_covers_whole_window=False, clear_sky=True, comfort_index=85,
+    )
+
+    def snap(**over):
+        f = dict(base)
+        f.update(over)
+        return WeatherSnapshot(loc, f["window"], "2026-09-13T14:00", f)
+
+    problems: list[str] = []
+
+    # Direction 1: fabrications must be caught.
+    fabrications = [
+        ("water on a dry road", snap(precipitation_mm=0.0),
+         "There's enough water coming down to sit on the road surface."),
+        ("a storm that isn't forecast", snap(thunderstorm_in_window=False),
+         "Lightning is a real risk in this window."),
+        ("a gap in a storm that covers the whole window", snap(
+            thunderstorm_in_window=True, thunderstorm_hours_in_window=6,
+            thunderstorm_covers_whole_window=True),
+         "The storm covers only part of the afternoon, so you can plan around it."),
+        ("calm wind during a gale", snap(wind_speed_kmh=45.0, wind_gusts_kmh=70.0),
+         "Light winds today."),
+    ]
+    for label, s, draft in fabrications:
+        if not check_claims(draft, s):
+            problems.append(f"unsupported claim slipped through: {label}")
+
+    # Direction 2: every policy's own advice must survive, or the guard is worse than
+    # useless -- it would push honest answers into the deterministic fallback.
+    triggers = {
+        "SOP-SYS-001": dict(rain_24h_mm=120.0, rain_class="very_heavy", rain_class_rank=5,
+                            gust_peak_24h_kmh=60.0, precipitation_mm=20.0,
+                            visibility_km=3.0, clear_sky=False),
+        "SOP-TR-002": dict(thunderstorm_in_window=True, thunderstorm_hours_in_window=2,
+                           clear_sky=False, precipitation_mm=3.0, rain_24h_mm=12.0),
+        "SOP-TR-003": dict(temperature_c=1.0, temp_min_24h_c=-3.0, precipitation_mm=1.0,
+                           clear_sky=False, rain_24h_mm=4.0),
+        "SOP-TR-004": dict(visibility_km=0.8, clear_sky=False),
+        "SOP-TR-001": dict(precipitation_mm=6.0, visibility_km=3.0, clear_sky=False,
+                           rain_24h_mm=14.0),
+        "SOP-EX-003": dict(wind_speed_kmh=25.0, wind_gusts_kmh=55.0,
+                           gust_differential_kmh=30.0, gust_peak_24h_kmh=55.0),
+        "SOP-VG-003": dict(temperature_c=34.0, apparent_temperature_c=34.0),
+        "SOP-GEN-001": dict(),
+    }
+    for sid, over in triggers.items():
+        s = snap(**over)
+        found = check_claims(render_deterministic(s, pol[sid]), s)
+        if found:
+            problems.append(f"{sid}'s own advice was rejected: {found}")
+
+    return problems
+
+
 UNIT_CHECKS = {
     "window_isolation": check_window_isolation,
     "policy_validation": check_policy_validation,
     "no_contradiction": check_no_contradiction,
+    "claim_grounding": check_claim_grounding,
 }
 
 

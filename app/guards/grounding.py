@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from app.guards.claims import check_claims
 from app.sops.schema import SOP
 from app.weather.snapshot import WeatherSnapshot
 
@@ -72,11 +73,14 @@ class GroundingReport:
     ungrounded_numbers: list[str] = field(default_factory=list)
     missing_citation: bool = False
     foreign_sop_ids: list[str] = field(default_factory=list)
+    unsupported_claims: list[str] = field(default_factory=list)
 
     def reason(self) -> str:
         bits = []
         if self.ungrounded_numbers:
             bits.append(f"numbers not in the forecast: {', '.join(self.ungrounded_numbers)}")
+        if self.unsupported_claims:
+            bits.append(f"claims the forecast contradicts: {'; '.join(self.unsupported_claims)}")
         if self.missing_citation:
             bits.append("the required policy id was not cited")
         if self.foreign_sop_ids:
@@ -155,14 +159,20 @@ def check(
         if not _matches(token, allowed):
             ungrounded.append(token)
 
+    # Pass 3 -- non-numeric claims. The allow-set cannot judge a sentence like "the storm
+    # covers only part of today", which contains no figure at all. See guards/claims.py.
+    claims = check_claims(draft, snapshot)
+
     allowed_ids = {_normalise_id(s.id) for s in cited_sops}
     found_ids = {_normalise_id(m) for m in SOP_ID_RE.findall(draft)}
 
     return GroundingReport(
         ok=not ungrounded
+        and not claims
         and _normalise_id(selected.id) in found_ids
         and not (found_ids - allowed_ids),
         ungrounded_numbers=sorted(set(ungrounded)),
+        unsupported_claims=claims,
         missing_citation=_normalise_id(selected.id) not in found_ids,
         foreign_sop_ids=sorted(found_ids - allowed_ids),
     )

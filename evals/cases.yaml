@@ -261,6 +261,19 @@ cases:
     mode: unit
     check: no_contradiction
 
+  - id: claim_grounding
+    checking: >
+      Non-numeric claims are checked against the snapshot, and honest policy wording is
+      not. The numeric allow-set answers "did this figure come from the API"; it cannot
+      answer "is this sentence true", which is how a reply once described water on the
+      road beside a reading of 0.0 mm.
+    pass_means: >
+      Four fabricated claims -- water on a dry road, an invented storm, a gap in a storm
+      that covers the whole window, calm wind during a gale -- are all rejected, and every
+      policy's own advice passes unflagged when that policy fires.
+    mode: unit
+    check: claim_grounding
+
   - id: conflict_resolution
     checking: >
       When several policies genuinely apply, the documented order decides: an override

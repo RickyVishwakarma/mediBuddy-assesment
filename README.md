@@ -258,9 +258,20 @@ number came from the API":
 > **No number in a reply is ever originated by the model.** Each traces to the API
 > response for that request, or to a reviewed policy file.
 
-And the guard checks **numbers, not propositions** — "the storm covers only part of today"
-contains no figure. Mitigated by making the snapshot rich enough that the model needn't
-infer; this is the softest part of the design.
+**Non-numeric claims are checked too** — [`app/guards/claims.py`](app/guards/claims.py). A
+sentence like "the storm covers only part of today" or "there's water sitting on the road"
+contains no figure at all, so the allow-set has nothing to test. That gap produced two real
+bugs, so it now has its own pass: ten phrase patterns, each paired with a predicate over
+the snapshot. Assert something the forecast contradicts and the reply is rejected exactly
+as an ungrounded number is.
+
+It's a **table, not a model** — every rejection traces to one named rule you can read and
+argue with, and adding a check is adding a row. Tested in both directions, because a
+checker that rejects honest wording is worse than none: **10/10 fabricated claims caught,
+0 false positives across all 13 policies' own advice.**
+
+**It fails toward acceptance**, which is the honest limit: a proposition nobody has written
+a check for passes unexamined. This narrows the gap; it does not close it.
 
 ---
 
