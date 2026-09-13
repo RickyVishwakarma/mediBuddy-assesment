@@ -32,7 +32,7 @@ PACE_SECONDS = float(os.getenv("EVAL_PACE_SECONDS", "20"))
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.graph.build import ask, build_graph  # noqa: E402
+from app.graph.build import ask  # noqa: E402
 from app.sops.engine import match_policies, select  # noqa: E402
 from app.sops.loader import load_policies  # noqa: E402
 from app.weather.openmeteo import (  # noqa: E402
@@ -72,7 +72,7 @@ SOP-EX-001. Neither contains a word from the rule's trigger vocabulary.
 **Adversarial choice.** Three are covered. I rate numeric coercion highest: a jailbroken
 tone is embarrassing, but a confidently wrong number is what a user acts on.
 
-## Seven defects found, and what caught them
+## Nine defects found, and what caught them
 
 The suite found **one**. Recorded because "it passed" only means something if it could
 have failed.
@@ -86,6 +86,8 @@ have failed.
 | 5 | `night` was defined in the snapshot but missing from the intent vocabulary, so "at night?" silently answered about the evening. Now 21:00-05:00, wrapping past midnight. | using the chat UI |
 | 6 | The all-clear contradicted the hazard rules -- it checks sustained wind, not gusts, so it said "go ahead" beside a gust warning. Fixed with `only_if_alone` rather than copying thresholds, which would couple it to every future policy. | auditing the policy set |
 | 7 | A rule's advice was untrue on some of its own triggers. `SOP-TR-001` ("rain heavy enough to slow a journey") also fired on low visibility alone, so on a dry fog day it said "there's enough water coming down to sit on the road surface" beside a snapshot reading 0.0 mm. Auditing every `any:` branch found three more: SOP-EX-001 fired on the day's peak UV and claimed the sun was strong when you asked about 19:00; SOP-EX-003 said "gusty rather than merely strong" on a steady 62 km/h wind; SOP-VG-003 said "in direct sun" on an overcast 36 C day. Split out SOP-TR-004 for visibility, dropped the peak-UV branch, reworded the other two. | auditing the policy set |
+| 8 | Ordinary weather matched no policy at all. "Is it safe to cycle in Bhopal today?" answered "we have no guidance" on a day with a 100% chance of rain: rewriting SOP-TR-001 onto rainfall intensity had removed the "rain is likely" case without replacing it. Adding `policy_coverage` then found two more holes -- a 41 C commute matched nothing because the heat rules were scoped to exercise and not commuting, and cold matched nothing for anyone but the elderly, the set having heat stress with no general equivalent (now SOP-EX-005). | running the app |
+| 9 | A policy added to a running server was silently ignored. The loader cached indefinitely, so a server held 13 policies while the directory had 14 -- breaking the one promise the whole design rests on. Asking uvicorn to watch the files looked like a fix and is not: its reloader is oriented at `.py`, and that flag had been written into the README without being verified. The loader now fingerprints the directory and re-reads on change. | running the app |
 
 **Non-numeric claims.** Defects 4, 6 and 7 all involved sentences rather than figures:
 every number in those replies was real, and the problem was which window, which rule, or
@@ -94,7 +96,7 @@ which condition they described. The numeric allow-set could never have caught th
 `guards/claims.py` now checks propositions as well -- ten phrase patterns, each paired
 with a predicate over the snapshot, rejecting a reply that asserts what the forecast
 contradicts. Tested both ways, since over-rejection would quietly degrade every answer:
-10/10 fabricated claims caught, 0 false positives across all 13 policies' own advice.
+10/10 fabricated claims caught, 0 false positives across every policy's own advice.
 Guarded by `claim_grounding`.
 
 It is a table rather than a model, so every rejection traces to a named rule, and it fails
@@ -106,8 +108,14 @@ branch that widens the trigger without fitting the advice is a grounding bug no 
 check will find, because every figure involved is real. That is defect 7, and it is the
 review I would run first on any new policy.
 
-Every guard here was verified by reintroducing its defect and watching it fail. Twice a
-verification silently did nothing and reported a pass.
+Defects 8 and 9 were both found by running the application and asking the brief's own
+example question -- not by any test. Every case here pins one expected policy, so none of
+them could detect a hole where nothing matched at all; `policy_coverage` now asserts the
+opposite.
+
+Every guard here was verified by reintroducing its defect and watching it fail. Three times
+a verification silently did nothing and reported a pass -- a mangled patch script, a URL
+match that stubbed the wrong endpoint, and a filesystem check standing in for a git one.
 
 """
 

@@ -89,5 +89,3 @@ def load_policies(directory: Path | None = None, use_cache: bool = True) -> list
     return policies
 
 
-def clear_cache() -> None:
-    _CACHE.clear()
