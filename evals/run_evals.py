@@ -92,10 +92,10 @@ produces an embarrassing tone; a confidently wrong *number* is what a user actua
 on. `adversarial_numeric_coercion` is therefore the case aimed at the guarantee the whole
 design exists to protect. Injection and fabricated-policy confirmation are also covered.
 
-**Four real defects found while building this, all since fixed.** They are recorded
-because "the suite passed" is only meaningful if it was capable of failing. Note that the
-most serious one was found by using the chat UI, not by this suite -- which is the honest
-argument for doing both:
+**Five real defects found while building this, all since fixed.** They are recorded
+because "the suite passed" is only meaningful if it was capable of failing. Note that only
+one of the five was found by this suite; the rest came from probing by hand and from using
+the chat UI -- which is the honest argument for doing both:
 
 1. *A hallucinated figure passed the grounding guard.* An earlier guard allowed a fixed
    list of "prose" numbers (15, 20, 30, 45, 60, 90) so phrases like "wait 30 minutes"
@@ -125,6 +125,16 @@ argument for doing both:
    could never have caught it: every number in that reply was genuine, the storm was real,
    it simply belonged to a different part of the day. `window_isolation` now guards it,
    and that case was verified to fail when the defect is deliberately reintroduced.
+
+5. *A whole time window was unreachable.* Asking "at night?" silently answered about the
+   evening. `night` was defined in the snapshot's window table but missing from the intent
+   vocabulary, so the parser could never produce it -- dead configuration that looked
+   supported from one side and did not exist from the other. It was also defined as
+   22:00-23:00, two hours, when night plainly crosses midnight. Night is now 21:00-05:00
+   and wraps into the next day's forecast hours, and `window_isolation` now asserts the
+   two window lists cannot drift apart again. The difference is not cosmetic: for the
+   location tested, evening carried a 95% chance of rain and the night 76%, which is a
+   different answer to the same question.
 
 **What the numeric guard does not cover.** Defect 4, and a related one where the model
 asserted "the storm covers only part of today" from a snapshot holding nothing but a
@@ -344,6 +354,32 @@ def check_window_isolation() -> list[str]:
     now = make(payload, location, "now")
     if not now.get("thunderstorm_in_window"):
         problems.append("'now' should still reflect the current conditions, and did not")
+
+    # Every window the snapshot can aggregate must also be reachable from the intent
+    # vocabulary, and vice versa. `night` was once defined in WINDOW_HOURS but missing
+    # from TIME_WINDOWS, so asking "at night?" silently answered about the evening --
+    # dead configuration that looked supported from one side and did not exist from the
+    # other. This asserts the two lists cannot drift apart again.
+    from app.graph.state import TIME_WINDOWS
+    from app.weather.snapshot import WINDOW_HOURS
+
+    unreachable = set(WINDOW_HOURS) - set(TIME_WINDOWS)
+    if unreachable:
+        problems.append(
+            f"windows the snapshot supports but intent can never produce: {sorted(unreachable)}"
+        )
+    undefined = set(TIME_WINDOWS) - set(WINDOW_HOURS) - {"now", "today"}
+    if undefined:
+        problems.append(
+            f"windows intent can produce but the snapshot cannot aggregate: {sorted(undefined)}"
+        )
+
+    # A wrapping window must actually wrap, not collapse onto the neighbouring one.
+    night = make(payload, location, "night")
+    evening = make(payload, location, "evening")
+    if night.get("window_hours") == evening.get("window_hours"):
+        problems.append("night and evening cover the same hours -- night is not wrapping")
+
     return problems
 
 

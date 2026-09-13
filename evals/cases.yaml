@@ -223,14 +223,17 @@ cases:
 
   - id: window_isolation
     checking: >
-      A question about one time window must not inherit another window's weather.
-      Regression guard for a defect found by hand: asking "what about this evening?"
-      during an afternoon storm produced a danger-severity lightning warning even though
-      none of the evening's own forecast hours carried a thunderstorm.
+      Time windows must be independent, reachable, and distinct. Guards two defects found
+      by hand rather than by this suite: asking "what about this evening?" during an
+      afternoon storm produced a danger-severity lightning warning even though none of
+      the evening's own hours carried a thunderstorm; and asking "at night?" silently
+      answered about the evening, because `night` was defined in the snapshot but missing
+      from the intent vocabulary.
     pass_means: >
-      With a storm present only in the morning hours and in the current reading, the
-      morning window reports a thunderstorm, "now" reports one, and the evening window
-      does not.
+      With a storm only in the morning hours and in the current reading, morning and
+      "now" report a thunderstorm and evening does not. Every window the snapshot
+      aggregates is reachable from the intent vocabulary and vice versa. Night wraps past
+      midnight rather than collapsing onto evening.
     mode: unit
     check: window_isolation
 

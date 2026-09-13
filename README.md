@@ -454,11 +454,12 @@ The other two cover fabricated-policy confirmation and classic instruction overr
 
 Worth stating plainly, because it qualifies how much the green run above is worth.
 
-Four real defects surfaced while building this. **The eval suite found one of them.** The
-other three came from probing by hand: feeding the guard a deliberately fabricated reply,
-reading the deterministic fallback's actual output, and asking the bot a natural follow-up
-question in the chat UI. All four are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md),
-and each now has a case guarding it.
+Five real defects surfaced while building this. **The eval suite found one of them.** The
+other four came from probing by hand: feeding the guard a deliberately fabricated reply,
+reading the deterministic fallback's actual output, and asking the bot ordinary follow-up
+questions in the chat UI — "what about this evening?" and "at night?" each exposed a
+different bug. All five are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md), and each now
+has a case guarding it.
 
 The most serious — one window's weather leaking into another, producing a danger-severity
 lightning warning for a storm-free evening — is the clearest illustration of the limit. No
@@ -468,6 +469,12 @@ was real, it simply belonged to a different part of the day.
 
 The lesson I'd carry forward is that a suite tests the failures you already imagined.
 Manual probing is how you find the ones you didn't, and the two are not substitutes.
+
+A second habit that earned its keep: **every regression guard here was verified by
+reintroducing the defect and watching it fail.** Twice a verification silently did nothing
+and reported a pass — once because a patch script never applied, once because a test
+matched `api.open-meteo.com`, which is a substring of `geocoding-api.open-meteo.com`, and
+so stubbed the wrong call. A guard you have not seen fail is not yet a guard.
 
 ## Known gaps
 

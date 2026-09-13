@@ -37,11 +37,12 @@ RAIN_CLASSES: list[tuple[str, float]] = [
 ]
 
 # Local-hour ranges per named window. "today" and "now" are handled separately.
+# A range whose low is greater than its high wraps past midnight -- see _window_hours.
 WINDOW_HOURS: dict[str, tuple[int, int]] = {
     "morning": (6, 11),
     "afternoon": (12, 17),
-    "evening": (18, 22),
-    "night": (22, 23),
+    "evening": (18, 21),
+    "night": (21, 5),
 }
 
 
@@ -199,15 +200,29 @@ def _window_hours(payload: dict, window: str) -> list[int]:
 
     indices: list[int] = []
     for i, stamp in enumerate(times):
-        if stamp[:10] != today:
-            continue
-        hour = int(stamp[11:13])
+        day, hour = stamp[:10], int(stamp[11:13])
+
         if window == "today":
-            if hour >= now_hour:
+            if day == today and hour >= now_hour:
                 indices.append(i)
-        elif window in WINDOW_HOURS:
-            low, high = WINDOW_HOURS[window]
-            if low <= hour <= high:
+            continue
+
+        if window not in WINDOW_HOURS:
+            continue
+
+        low, high = WINDOW_HOURS[window]
+        if low <= high:
+            # An ordinary same-day window.
+            if day == today and low <= hour <= high:
+                indices.append(i)
+        else:
+            # A window that wraps past midnight -- night is 21:00 to 05:00. Someone
+            # asking "is it safe to cycle at night" means the hours either side of
+            # midnight, so the late hours come from today and the small hours from
+            # tomorrow. forecast_days=2 is requested precisely so those exist.
+            if day == today and hour >= low:
+                indices.append(i)
+            elif day > today and hour <= high:
                 indices.append(i)
 
     # Asking about a window that has already passed today falls back to the rest of

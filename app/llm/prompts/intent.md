@@ -46,8 +46,13 @@ children_play, not sports.
   now        right now, "today" with no part of day given, no time stated at all
   morning    this morning, early, before lunch, "at 8am"
   afternoon  this afternoon, midday, lunchtime, "at 2pm"
-  evening    this evening, tonight, after work, "at 7pm"
+  evening    this evening, after work, "at 7pm", "at 8pm"
+  night      at night, late, after dark, "at 11pm", "in the small hours", overnight
   today      explicitly the whole day, "at any point today", "sometime today"
+
+"Tonight" is ambiguous in ordinary speech. Read it as **evening** when it's about the
+part of the day people are usually still up and out for, and as **night** only when the
+message points later than that -- "late tonight", "tonight after midnight".
 
 **is_followup** — true if the current message depends on an earlier turn to make sense.
 

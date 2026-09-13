@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.vocabulary import ACTIVITIES
 
-TIME_WINDOWS = ["now", "morning", "afternoon", "evening", "today"]
+TIME_WINDOWS = ["now", "morning", "afternoon", "evening", "night", "today"]
 
 TRACE_RESET = "__reset__"
 
