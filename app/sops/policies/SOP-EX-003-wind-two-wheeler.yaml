@@ -1,0 +1,32 @@
+id: SOP-EX-003
+title: Strong wind while cycling or riding a two-wheeler
+category: outdoor_exercise
+severity: warning
+override: false
+
+applies_to:
+  activities: [cycling, motorcycle]
+  intent_hint: "user is riding something with two wheels, pedal-powered or motorised"
+
+match:
+  any:
+    - {field: wind_speed_kmh, op: gte, value: 40}
+    - {field: wind_gusts_kmh, op: gte, value: 50}
+
+advice: |
+  This is a safety risk rather than a comfort issue. Crosswinds and gusts at this
+  strength can move a rider out of their lane without warning -- the danger is the sudden
+  lateral shove, not the sustained headwind.
+
+  Postpone the ride if you can, or take an enclosed vehicle or public transport instead.
+  If the ride is unavoidable: slow down, keep both hands on the bars, leave extra space
+  around larger vehicles, and take particular care on bridges, flyovers and open stretches
+  between buildings, where the gusts are strongest.
+
+compose_notes: >
+  State the wind speed and gust figures.
+
+rationale: >
+  Sustained wind at 40 km/h or gusts at 50 km/h is sufficient to destabilise a loaded
+  two-wheeler, and gust-driven loss of control is a recognised single-vehicle crash
+  cause for riders.

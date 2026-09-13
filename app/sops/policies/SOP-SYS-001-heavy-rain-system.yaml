@@ -1,0 +1,49 @@
+id: SOP-SYS-001
+title: Active heavy-rain system overrides activity-specific guidance
+category: situational_override
+severity: danger
+
+# Pre-empts every non-override policy. A rain system touches commuting, exercise and
+# children's outings at the same time, so it must not be ranked as one hazard among
+# peers -- it reframes the whole question.
+override: true
+
+applies_to:
+  activities: ["*"]
+  intent_hint: "any outdoor activity question, whatever the category"
+
+# Open-Meteo does not publish "a well-marked low-pressure area exists", so this rule
+# matches the observable signature of one. Thresholds are the India Meteorological
+# Department's published 24h rainfall classes:
+#   heavy 64.5-115.5 mm | very heavy 115.6-204.4 mm | extremely heavy >204.4 mm
+# rain_class_rank 4 is the "heavy" boundary.
+# The second branch catches the case the brief describes, where no single reading looks
+# extreme but substantial rain arriving with squally gusts makes the situation severe.
+match:
+  any:
+    - {field: rain_class_rank, op: gte, value: 4}
+    - all:
+        - {field: rain_24h_mm, op: gte, value: 35}
+        - {field: gust_peak_24h_kmh, op: gte, value: 45}
+
+advice: |
+  A heavy-rain system is active over this location, and that is the dominant risk today
+  whatever the plan is.
+
+  Postpone non-essential outdoor plans for the duration. Where travel is unavoidable:
+  allow extra time, expect waterlogging and reduced visibility, avoid underpasses,
+  low-lying roads and any route that floods, and do not attempt to cross moving water on
+  foot or on a two-wheeler. Check for local authority alerts before leaving, because
+  conditions under a system like this change faster than a forecast refresh.
+
+compose_notes: >
+  Lead with the rain system itself, before any activity-specific advice -- it reframes
+  the question rather than being one hazard among several. State the rainfall total and,
+  where relevant, the peak gust figure, so the answer is anchored to the actual numbers
+  rather than reading as a general warning about rain.
+
+rationale: >
+  Rainfall at or above the IMD "heavy" class, or moderate-to-large accumulation combined
+  with squally gusts, indicates a synoptic system rather than a passing shower. The
+  situational risk (waterlogging, falling branches, sudden visibility loss, disrupted
+  transport) exceeds what any single threshold on wind or precipitation would capture.

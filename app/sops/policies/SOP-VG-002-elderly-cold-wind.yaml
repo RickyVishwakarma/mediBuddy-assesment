@@ -1,0 +1,33 @@
+id: SOP-VG-002
+title: Older adults in cold or windy conditions
+category: vulnerable_groups
+severity: caution
+override: false
+
+applies_to:
+  activities: [elderly_outing]
+  intent_hint: "the person going outside is an older adult -- a parent, grandparent, a care visit"
+
+match:
+  any:
+    - {field: apparent_temperature_c, op: lte, value: 5}
+    - all:
+        - {field: apparent_temperature_c, op: lte, value: 12}
+        - {field: wind_speed_kmh, op: gte, value: 30}
+
+advice: |
+  Adjust the outing rather than cancelling it -- unless the person has a known cardiac or
+  respiratory condition, in which case check with their clinician first.
+
+  Use layered clothing with a windproof outer layer, keep head and hands covered, plan a
+  shorter route with somewhere indoors to stop partway, and go out in the warmest part of
+  the day rather than early morning or after dark. Wind matters more than the thermometer
+  here, so a sheltered route is worth more than an extra layer.
+
+compose_notes: >
+  Give the "feels like" figure and the wind speed where it contributed.
+
+rationale: >
+  Older adults lose heat faster, feel cold onset later, and face raised cardiac strain
+  in cold combined with wind. Severity is caution rather than warning because the
+  mitigation is straightforward and the activity is usually worth keeping.

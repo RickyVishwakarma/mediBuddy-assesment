@@ -1,0 +1,34 @@
+id: SOP-VG-003
+title: Hot pavement risk when walking a dog
+category: vulnerable_groups
+severity: caution
+override: false
+
+applies_to:
+  activities: [pet_walk]
+  intent_hint: "user is walking a dog or taking a pet outdoors"
+
+# Clear sky matters as much as air temperature: unshaded asphalt in direct sun runs far
+# hotter than the air above it, which is the actual hazard to paw pads.
+match:
+  any:
+    - all:
+        - {field: temperature_c, op: gte, value: 32}
+        - {field: clear_sky, op: is_true}
+    - {field: temperature_c, op: gte, value: 35}
+
+advice: |
+  The risk here is the ground surface, not the air temperature. Asphalt in direct sun runs
+  far hotter than the air above it and can burn paw pads within a minute.
+
+  Use the back-of-hand test: if you can't hold the back of your hand on the pavement for
+  seven seconds, it's too hot to walk your dog on. Move the walk to early morning or
+  after sunset, keep to grass or shaded paths, make it shorter than usual, and carry
+  water. Flat-faced breeds, older dogs and overweight dogs overheat considerably faster.
+
+compose_notes: >
+  State the temperature figure.
+
+rationale: >
+  Paw pad burns are a common and preventable summer veterinary presentation, and owners
+  routinely judge conditions by air temperature rather than surface temperature.

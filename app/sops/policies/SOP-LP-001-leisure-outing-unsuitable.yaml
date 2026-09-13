@@ -1,0 +1,51 @@
+id: SOP-LP-001
+title: Relaxed outdoor outing is a poor bet today
+category: leisure_planning
+severity: advisory
+override: false
+
+applies_to:
+  activities: [picnic, gardening, general_outdoor, children_play]
+  intent_hint: "user is asking whether today is nice for something unhurried outdoors"
+
+# The fuzzy rule. "Is today good for a picnic" has no threshold to check: 24 C with an
+# 80% chance of a shower and gusty wind is a bad picnic day while breaching no single
+# hazard limit, and 19 C and still is a fine one.
+#
+# So the condition is written in prose and evaluated by a judge (see
+# app/llm/semantic.py), which is given only the fact block -- the same numbers every
+# other rule sees. The judge returns a boolean and a reason. It never writes advice:
+# the text below is the entire output of this policy either way.
+#
+# comfort_index is a deterministic 0-100 composite computed in code, included so the
+# judge reasons over a stable figure instead of inventing its own impression.
+match:
+  any:
+    - semantic: >
+        Conditions would make an unhurried outdoor sit-down of two or three hours
+        unpleasant or unreliable -- for example a real chance of rain interrupting it,
+        wind strong enough to make eating outdoors or laying out a blanket annoying,
+        muggy or clammy air, or a sky that looks likely to turn. Judge the experience as
+        a whole rather than any single reading, and treat a day that is merely
+        imperfect, but still workable, as NOT matching.
+    - {field: comfort_index, op: lte, value: 35}
+
+advice: |
+  Today is a poor bet for a relaxed outdoor outing.
+
+  If the plan is flexible, a different day this week would be more reliable. If it isn't,
+  a shorter window earlier or later in the day may dodge the worst of it, or pick
+  somewhere with cover nearby so the outing can move indoors without ending.
+
+compose_notes: >
+  Say specifically what makes it a poor bet -- the chance of rain, the wind, the
+  mugginess -- rather than discouraging in general terms. Where the issue is only a
+  chance of rain rather than a certainty, say so and let the user take the gamble
+  knowingly. This is a comfort and planning judgement, not a safety warning: do not dress
+  it up as one, and do not push back on a user who says they are going anyway.
+
+rationale: >
+  Not every useful piece of guidance reduces to a threshold. Handling "is it a nice day
+  for this" in policy rather than leaving it to the model's own judgement keeps the
+  advice ours, while the deterministic comfort_index floor guarantees the rule still
+  fires on a clearly miserable day even if the judge is unavailable or too generous.

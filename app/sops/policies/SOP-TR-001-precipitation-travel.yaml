@@ -1,0 +1,28 @@
+id: SOP-TR-001
+title: High precipitation probability affecting travel
+category: travel_commute
+severity: advisory
+override: false
+
+applies_to:
+  activities: [commute, driving, motorcycle, cycling, walking]
+  intent_hint: "user is getting somewhere -- to work, to school, across town"
+
+match:
+  {field: precipitation_probability_pct, op: gte, value: 70}
+
+advice: |
+  Expect delays rather than danger. Rain at this probability is more likely than not to
+  affect the journey.
+
+  Check for service alerts or traffic disruption before you leave, set off earlier than
+  usual, and take rain protection. If you're riding or walking, bear in mind that braking
+  distances lengthen and drivers see pedestrians later in the rain.
+
+compose_notes: >
+  Give the precipitation probability figure so the user can weigh it themselves.
+
+rationale: >
+  A 70% probability is the point where planning around rain is the better default than
+  hoping to avoid it. This is a delay-and-preparation advisory, not a safety warning --
+  severity is set accordingly so it never outranks a genuine hazard.

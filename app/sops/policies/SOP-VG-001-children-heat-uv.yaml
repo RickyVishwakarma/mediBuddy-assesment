@@ -1,0 +1,33 @@
+id: SOP-VG-001
+title: Children outdoors in strong sun or heat
+category: vulnerable_groups
+severity: warning
+override: false
+
+applies_to:
+  activities: [children_play]
+  intent_hint: "the person going outside is a child -- a park trip, playground, sports practice"
+
+# Thresholds sit below the adult equivalents in SOP-EX-001 and SOP-EX-002 on purpose.
+match:
+  any:
+    - {field: uv_index, op: gte, value: 7}
+    - {field: apparent_temperature_c, op: gte, value: 35}
+
+advice: |
+  These conditions are harder on a child than the same numbers would be on an adult, so
+  it's worth adjusting the outing rather than just going anyway.
+
+  Shift it to before 10:00 or after 16:00, pick a shaded or partly covered play area,
+  apply sunscreen 20 minutes before heading out and reapply it, and use a wide-brimmed
+  hat. Offer water regularly rather than waiting to be asked -- children under-report
+  thirst. Keep the visit shorter than usual, and watch for flushed skin, unusual
+  tiredness or irritability, which are early heat-stress signs in children.
+
+compose_notes: >
+  Quote the UV index or the "feels like" temperature, whichever triggered the advice.
+
+rationale: >
+  Children have a higher surface-area-to-mass ratio, sweat less efficiently and are less
+  likely to self-regulate exposure, so the thresholds that matter for them are lower
+  than the adult exercise thresholds.

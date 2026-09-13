@@ -1,0 +1,35 @@
+id: SOP-TR-002
+title: Thunderstorm forecast in the asked-about window
+category: travel_commute
+severity: danger
+override: false
+
+applies_to:
+  activities: ["*"]
+  intent_hint: "any outdoor plan during a window with thunderstorms forecast"
+
+# thunderstorm_in_window is true when a WMO code of 95, 96 or 99 appears in the
+# hourly slice the user asked about, or in the current conditions.
+match:
+  {field: thunderstorm_in_window, op: is_true}
+
+advice: |
+  Don't be outdoors or in an exposed vehicle during the storm. Lightning is the one risk
+  that doesn't scale down with care: there is no safe way to be in an open field, on a
+  bike, on water, or under an isolated tree during a thunderstorm.
+
+  Wait indoors in a substantial building, or inside a hard-topped vehicle, and stay there
+  until 30 minutes after the last thunder. Don't shelter under trees, at bus stops with
+  metal frames, or in open-sided structures.
+
+compose_notes: >
+  The FACTS block states how many of the window's forecast hours carry a thunderstorm.
+  If it covers only some of them, say so, so the user can plan around it rather than
+  write off the whole window. If it covers all of them, or the FACTS do not say, do not
+  suggest there is a gap to work around -- that would be inventing a break in the weather
+  we cannot see.
+
+rationale: >
+  Lightning risk is binary in a way that wind and rain are not -- mitigation measures
+  that work for other hazards do not reduce it. Severity is danger even when the storm
+  is brief.

@@ -1,0 +1,32 @@
+id: SOP-EX-001
+title: High UV during the midday window
+category: outdoor_exercise
+severity: caution
+override: false
+
+applies_to:
+  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor]
+  intent_hint: "user plans to exert themselves outdoors in daylight"
+
+# window_start_hour / window_end_hour describe the span the user asked about, so this
+# tests "does the plan overlap 11:00-16:00" rather than "is it 11:00-16:00 right now".
+match:
+  all:
+    - {field: uv_index, op: gte, value: 8}
+    - {field: window_start_hour, op: lte, value: 16}
+    - {field: window_end_hour, op: gte, value: 11}
+
+advice: |
+  Don't exercise outdoors unprotected between 11:00 and 16:00. If you're out in it, use
+  broad-spectrum sunscreen reapplied every two hours, a hat and UV-blocking sunglasses,
+  and take breaks in the shade.
+
+  Better still, move the session to early morning or after 16:00, once the UV index
+  drops. If it has to happen in that window, keep it short and stick to shaded routes.
+
+compose_notes: >
+  Quote the UV index figure so the user can judge it against the advice.
+
+rationale: >
+  A UV index of 8 or above is the WHO "very high" band, where unprotected skin can burn
+  within minutes and cumulative exposure risk is material for regular outdoor exercisers.

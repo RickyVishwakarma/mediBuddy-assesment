@@ -1,0 +1,37 @@
+id: SOP-GEN-001
+title: Conditions are benign -- proceed as planned
+category: general_conditions
+severity: info
+override: false
+
+applies_to:
+  activities: ["*"]
+  intent_hint: "any outdoor plan on a day with nothing notable in the forecast"
+
+# The affirmative case. Without this, a genuinely pleasant day would fall through to
+# "no guidance", which would be an honest answer but a useless one -- and would teach a
+# user that the bot has nothing to say about good days.
+match:
+  all:
+    - {field: apparent_temperature_c, op: between, value: [5, 32]}
+    - {field: uv_index, op: lt, value: 7}
+    - {field: wind_speed_kmh, op: lt, value: 30}
+    - {field: precipitation_probability_pct, op: lt, value: 40}
+    - {field: thunderstorm_in_window, op: is_false}
+    - {field: heavy_rain_regime, op: is_false}
+
+advice: |
+  Nothing in the forecast for this window meets any of our hazard thresholds, so go
+  ahead as planned.
+
+  Ordinary sense still applies -- water for longer efforts, sunscreen if you'll be out
+  for hours -- but there is nothing here that warrants changing the plan.
+
+compose_notes: >
+  Give a clear go-ahead and do not hedge it or manufacture concern. Quote a couple of the
+  actual figures so the answer is visibly based on the forecast rather than on optimism.
+
+rationale: >
+  A policy set that only ever fires on hazards produces a bot that either warns or
+  shrugs. Covering the benign case keeps the severity range honest and makes an
+  affirmative answer as traceable as a cautionary one.

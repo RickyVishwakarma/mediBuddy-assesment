@@ -1,0 +1,36 @@
+id: SOP-EX-002
+title: Heat stress risk during outdoor exertion
+category: outdoor_exercise
+severity: warning
+override: false
+
+applies_to:
+  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor]
+  intent_hint: "user plans sustained physical effort outdoors"
+
+# Apparent temperature, not raw temperature: humidity is what defeats sweat cooling,
+# and 34 C at 90% humidity is more dangerous than 38 C in dry air.
+match:
+  any:
+    - {field: apparent_temperature_c, op: gte, value: 38}
+    - all:
+        - {field: apparent_temperature_c, op: gte, value: 33}
+        - {field: humidity_pct, op: gte, value: 75}
+
+advice: |
+  This is a heat-stress risk, not a comfort complaint. Hold off on sustained outdoor
+  exertion until the apparent temperature falls.
+
+  If you're going ahead anyway: move it to before 08:00 or after sunset, cut the duration
+  and the intensity, pre-hydrate and carry more water than usual, and stop at the first
+  sign of dizziness, headache, cramping, or sweating that stops. Those last two mean get
+  into shade immediately -- don't push through them.
+
+compose_notes: >
+  Report the "feels like" figure and, where it drove the match, the humidity, because
+  the raw air temperature understates the risk here.
+
+rationale: >
+  Heat illness tracks apparent temperature rather than dry-bulb temperature. Above
+  roughly 38 C apparent, or 33 C with humidity above 75%, evaporative cooling becomes
+  unreliable and core temperature can rise during moderate exertion.
