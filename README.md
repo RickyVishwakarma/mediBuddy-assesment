@@ -166,6 +166,101 @@ unknown snapshot field 'temperature_celsius'. A rule referring to a field that d
 not exist would never fire. Did you mean: temperature_c, apparent_temperature_c?
 ```
 
+### Writing a policy — the full reference
+
+Everything a policy author needs, without reading any Python.
+
+**A policy file:**
+
+| Field | Required | What it is |
+|---|---|---|
+| `id` | yes | e.g. `SOP-EX-003`. Must be unique; it is what the reply cites |
+| `title` | yes | one line, shown in the citation and the fallback |
+| `category` | yes | free text — your own grouping |
+| `severity` | yes | `info` · `advisory` · `caution` · `warning` · `danger` |
+| `match` | yes | the condition, below |
+| `advice` | yes | **what the user is told.** Printed verbatim by the fallback, so write it to a person |
+| `applies_to.activities` | no | which activities this covers; `["*"]` for all. Default `["*"]` |
+| `applies_to.intent_hint` | no | a note for whoever reads the file; not used at runtime |
+| `compose_notes` | no | directions to the model — which figures to surface, what tone to avoid |
+| `rationale` | no | why this threshold, on this variable, at this severity |
+| `override` | no | `true` pre-empts every non-override policy |
+| `only_if_alone` | no | `true` drops this policy as soon as anything else matches |
+
+**Conditions** nest freely with `all`, `any` and `not`:
+
+```yaml
+match:                                       # a single test
+  {field: uv_index, op: gte, value: 6}
+
+match:                                       # everything must hold
+  all:
+    - {field: temperature_c, op: gte, value: 32}
+    - {field: clear_sky, op: is_true}
+
+match:                                       # either branch
+  any:
+    - {field: wind_gusts_kmh, op: gte, value: 65}
+    - all:
+        - {field: gust_differential_kmh, op: gte, value: 20}
+        - {field: wind_gusts_kmh, op: gte, value: 45}
+
+match:                                       # no threshold exists — ask the judge
+  semantic: "conditions would make a two-hour sit-down outdoors unpleasant"
+```
+
+**Operators:** `gte` `gt` `lte` `lt` `eq` `neq` `in` `not_in` `between` `is_true` `is_false`.
+`between` takes `[low, high]` inclusive; `in`/`not_in` take a list.
+
+**Fields** — 34, listed in [`app/vocabulary.py`](app/vocabulary.py). A name not on this
+list is rejected at load, with a suggestion.
+
+| Group | Fields |
+|---|---|
+| Readings for the window asked about | `temperature_c` `apparent_temperature_c` `humidity_pct` `wind_speed_kmh` `wind_gusts_kmh` `gust_differential_kmh` `uv_index` `precipitation_mm` `precipitation_probability_pct` `cloud_cover_pct` `visibility_km` |
+| Time | `local_hour` `is_daytime` `window` `window_start_hour` `window_end_hour` `window_hours` |
+| 24h aggregates — these describe a *regime* | `rain_24h_mm` `rain_hours_24h` `gust_peak_24h_kmh` `apparent_temp_max_24h_c` `temp_max_24h_c` `temp_min_24h_c` `uv_max_24h` `rain_class` `rain_class_rank` `heavy_rain_regime` |
+| Conditions | `weather_code` `thunderstorm_in_window` `thunderstorm_hours_in_window` `thunderstorm_covers_whole_window` `fog_in_window` `clear_sky` |
+| Composite | `comfort_index` (0–100, computed in code so it is stable) |
+
+**Activities** for `applies_to`: `cycling` `motorcycle` `running` `walking` `hiking`
+`sports` `commute` `driving` `picnic` `children_play` `elderly_outing` `pet_walk`
+`gardening` `general_outdoor`.
+
+**Two rules worth knowing before you write one.** A missing reading never counts as zero —
+if the API didn't return the field, the condition is false rather than true. And **the
+advice must be true for every condition that can trigger it**: an `any:` branch that
+widens the trigger without fitting the advice is a bug no numeric check will catch, which
+has happened here (defect 7 in [EVAL_RESULTS.md](EVAL_RESULTS.md)).
+
+---
+
+## What happens when you ask a question
+
+One real request, end to end:
+
+```
+"is it safe to cycle in Bhopal today?"
+
+1  parse_intent       → {location: "Bhopal", activity: "cycling",
+                         time_window: "today", in_scope: true}        ← LLM, schema-bound
+2  resolve_location   → Bhopal, Madhya Pradesh, India (23.25, 77.40)  ← geocoding API
+3  fetch_weather      → raw Open-Meteo JSON                           ← forecast API
+4  build_snapshot     → temperature_c 26.4 · uv_index 6.5
+                        precipitation_probability_pct 99.0
+                        thunderstorm_in_window true
+                        rain_class "light" · heavy_rain_regime false
+5  match_sops         → SOP-TR-002 (danger), SOP-TR-001 (advisory)    ← rules, no LLM
+6  rank_and_select    → SOP-TR-002 leads; SOP-TR-001 secondary
+7  compose_answer     → re-words SOP-TR-002's advice                  ← LLM, facts only
+8  verify_grounding   → every figure is in the snapshot; SOP cited ✓
+                     → END
+```
+
+The reply cites `SOP-TR-002`, and the numbers in it are the ones from step 4. If step 7
+had written a figure not in that snapshot, step 8 would have discarded it and sent it back
+to step 7 with a stricter prompt.
+
 ---
 
 ## Architecture

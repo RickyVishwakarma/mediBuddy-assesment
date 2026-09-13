@@ -283,7 +283,9 @@ cases:
     pass_means: >
       Policy count, node count and terminal count in the docs match the compiled graph and
       the policy directory; the README table and the policy directory list the same ids;
-      every file link resolves.
+      every file link resolves; and the policy-writing reference documents every operator,
+      snapshot field, activity, severity and SOP key that exists in code -- since a
+      reviewer adds a policy live using that reference.
     mode: unit
     check: docs_match_code
 

@@ -590,6 +590,23 @@ def check_docs_match_code() -> list[str]:
             if not link.startswith("http") and not (root / link.rstrip("/")).exists():
                 problems.append(f"{doc_name}: broken link -> {link}")
 
+    # The policy-writing reference must stay complete. A reviewer adds a policy live
+    # using it, so an operator or field that exists in code but not in the README is a
+    # trap, and one documented but removed from code is worse.
+    from app.sops.schema import LEAF_OPS, SEVERITY_ORDER, SOP
+    from app.vocabulary import ACTIVITIES, SNAPSHOT_FIELDS
+
+    for label, values in [
+        ("operator", LEAF_OPS),
+        ("snapshot field", SNAPSHOT_FIELDS),
+        ("activity", ACTIVITIES),
+        ("severity", SEVERITY_ORDER),
+        ("SOP key", set(SOP.model_fields) - {"source_file", "applies_to"}),
+    ]:
+        absent = sorted(v for v in values if f"`{v}`" not in readme)
+        if absent:
+            problems.append(f"README's policy reference is missing {label}(s): {absent}")
+
     return problems
 
 
