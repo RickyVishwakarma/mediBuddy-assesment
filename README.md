@@ -9,6 +9,28 @@ does not decide what is safe, and it does not decide the numbers.
 
 ---
 
+## Where everything is
+
+| What you asked for | Where |
+|---|---|
+| **Setup and run**, backend and frontend | [Quick start](#quick-start) — one command, then `http://localhost:8000` |
+| **The SOPs**, and why this form | [`app/sops/policies/`](app/sops/policies/) — 12 YAML files · [rationale](#the-sops) |
+| **The LangGraph implementation** | [`app/graph/`](app/graph/) — [state](app/graph/state.py), [nodes](app/graph/nodes.py), [wiring](app/graph/build.py) · [architecture](#architecture) |
+| **The eval suite and its results** | [`evals/`](evals/) · results in **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
+| **Honest notes on failures** | [What this suite did and didn't catch](#what-this-suite-did-and-didnt-catch) · [Known gaps](#known-gaps) |
+
+If you read only three things: the [grounding guard](app/guards/grounding.py), which is
+where "the model cannot invent numbers" is enforced; the
+[situational override](app/sops/policies/SOP-SYS-001-heavy-rain-system.yaml), which is the
+case the brief cares most about; and
+[what the suite didn't catch](#what-this-suite-did-and-didnt-catch), which is the honest
+account of what a green test run is worth here.
+
+**Current state:** 12 policies, 17 eval cases, last run **16 passed, 0 failed, 1 skipped**
+(the skip is deliberate — see [Evals](#evals)).
+
+---
+
 ## Quick start
 
 Requires Python 3.11+.
