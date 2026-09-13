@@ -48,6 +48,10 @@ a new session — matching "memory resets between sessions".
 
 **Evals** — `python evals/run_evals.py`. Five cases are offline and need no API key.
 
+**Docker**, if you'd rather not make a virtualenv — `docker build -t weather-advisory-bot .`
+then `docker run --rm -p 8000:8000 --env-file .env weather-advisory-bot`. The key is passed
+in at run time, never baked into the image.
+
 ### If a reply comes back plain
 
 Some replies read as flowing prose; others look like this:
