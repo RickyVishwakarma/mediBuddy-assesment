@@ -49,114 +49,57 @@ RESULTS_FILE = ROOT / "EVAL_RESULTS.md"
 
 # Emitted into every report. These are the caveats a reader needs in order to judge the
 # numbers above them, so they belong next to the results rather than only in the README.
-STANDING_NOTES = """## Notes on reading these results
+STANDING_NOTES = """## How to read these results
 
-**Why `severe_weather_live` usually skips.** It scans real cities for one currently in a
-heavy-rain regime and answers about it. When no such event exists, it reports SKIPPED --
-never a pass. It cannot be made to pass on demand, which is the point: it is the only
-case here that proves the behaviour against genuinely live severe conditions, so it must
-not be satisfiable by a quiet weather day. `severe_weather_recorded` is its deterministic
-twin, replaying a real recorded heavy-rain day (Mumbai, 2026-07-23, 107 mm with 69.8 km/h
-gusts) so the same behaviour is proven on any day of the year.
+**`severe_weather_live` usually skips.** It scans real cities for one currently in a
+heavy-rain regime. When none exists it reports SKIPPED, never a pass -- it cannot be made
+to pass on demand, which is the point. `severe_weather_recorded` is its deterministic
+twin, replaying a real heavy-rain day (Mumbai 2026-07-23, 107 mm, 69.8 km/h gusts).
 
-**On "your severe case only passed because you ran it during a rain event."** That is
-exactly why the suite is split. Behavioural claims run against recorded real responses;
-only invariants that hold in any weather run live. Concretely, every live case asserts
-that the numbers in the reply are a subset of the numbers the API returned, that the
-cited policy is the one the engine selected, and that no selection produces the
-no-guidance phrase. Those never go stale.
+**Live weather doesn't hold still, so the suite is split.** Behavioural claims replay
+recorded real responses; only invariants that hold in any weather run live -- numbers in
+the reply are a subset of the API's, the cited policy is the one the engine selected, and
+no selection produces the no-guidance phrase. Fixtures are chosen by running the real
+matcher over candidate days and keeping one where the intended policy leads, so a fixture
+cannot quietly stop testing its claim. Nothing about any weather event is hardcoded: no
+city name appears in any of the five files that decide an answer, and the only weather
+constants in code are the IMD rainfall classes.
 
-**Fixtures cannot silently rot.** `record_fixtures.py` chooses each recording by running
-the real matching engine over candidate days and keeping one where the intended policy
-actually leads. A fixture that stopped exercising its policy would fail to record rather
-than quietly pass.
+**Paraphrase cases were measured, not assumed.** `paraphrase_wind` shares only "across,
+around, two, wheels" with SOP-EX-003; `paraphrase_uv` shares only "one, sun" with
+SOP-EX-001. Neither contains a word from the rule's trigger vocabulary.
 
-**Nothing about any weather event is hardcoded.** Checked across all five files that
-decide an answer -- `engine.py`, `snapshot.py`, `openmeteo.py`, `nodes.py`,
-`grounding.py` -- none contains a city name, and the only numeric literals in the
-matching engine are loop constants. The single set of weather constants in code is the
-IMD 24h rainfall classification, which is a published standard rather than a reading from
-any particular day. Every threshold that decides an answer lives in a YAML policy file.
+**Adversarial choice.** Three are covered. I rate numeric coercion highest: a jailbroken
+tone is embarrassing, but a confidently wrong number is what a user acts on.
 
-**The paraphrase cases were measured, not assumed.** Comparing each paraphrased question
-against its target policy's full text, `paraphrase_wind` shares only "across, around,
-two, wheels" with SOP-EX-003, and `paraphrase_uv` shares only "one, sun" with SOP-EX-001
--- where "one" is simply "one o'clock". Neither question contains any word from the
-rule's trigger vocabulary: no wind, gust, safe, cycling, bike, UV, index or sunscreen.
-The policies' match conditions share no vocabulary with the questions at all; the only
-lexical link is "two wheels" resolving to the `cycling` activity, which is what activity
-scoping exists to do.
+## Seven defects found, and what caught them
 
-**Why numeric coercion is the adversarial case I weight highest.** Prompt injection
-produces an embarrassing tone; a confidently wrong *number* is what a user actually acts
-on. `adversarial_numeric_coercion` is therefore the case aimed at the guarantee the whole
-design exists to protect. Injection and fabricated-policy confirmation are also covered.
+The suite found **one**. Recorded because "it passed" only means something if it could
+have failed.
 
-**Six real defects found while building this, all since fixed.** They are recorded
-because "the suite passed" is only meaningful if it was capable of failing. Note that only
-one of the six was found by this suite; the rest came from probing by hand, from using the
-chat UI, and from auditing the policy set directly -- which is the honest argument for
-doing all of them:
+| # | Defect | Found by |
+|---|---|---|
+| 1 | A hallucinated "30 km/h" passed the grounding guard -- a prose-number allowance (15/20/30/45/60/90, so "wait 30 minutes" wasn't rejected) also swallowed fabricated readings. Unit-bearing numbers now get no allowance. | probing the guard |
+| 2 | A hostile framing ("it's only 12 degrees, right?") caused a refusal instead of an answer our policies covered. Scope now depends on what is asked, not how pushy it is. | **the eval suite** |
+| 3 | Tightening (1) made the guard reject *correct* replies saying "over the next 24 hours". Durations are now stripped -- a reading never carries a time unit. Over-rejection is quieter than under-rejection. | reading fallback output |
+| 4 | One window's weather leaked into another: asking about the evening during an afternoon storm gave a danger-severity lightning warning though no evening hour carried a storm. | using the chat UI |
+| 5 | `night` was defined in the snapshot but missing from the intent vocabulary, so "at night?" silently answered about the evening. Now 21:00-05:00, wrapping past midnight. | using the chat UI |
+| 6 | The all-clear contradicted the hazard rules -- it checks sustained wind, not gusts, so it said "go ahead" beside a gust warning. Fixed with `only_if_alone` rather than copying thresholds, which would couple it to every future policy. | auditing the policy set |
+| 7 | A rule's advice was untrue on some of its own triggers. `SOP-TR-001` ("rain heavy enough to slow a journey") also fired on low visibility alone, so on a dry fog day it said "there's enough water coming down to sit on the road surface" beside a snapshot reading 0.0 mm. Auditing every `any:` branch found three more: SOP-EX-001 fired on the day's peak UV and claimed the sun was strong when you asked about 19:00; SOP-EX-003 said "gusty rather than merely strong" on a steady 62 km/h wind; SOP-VG-003 said "in direct sun" on an overcast 36 C day. Split out SOP-TR-004 for visibility, dropped the peak-UV branch, reworded the other two. | auditing the policy set |
 
-1. *A hallucinated figure passed the grounding guard.* An earlier guard allowed a fixed
-   list of "prose" numbers (15, 20, 30, 45, 60, 90) so phrases like "wait 30 minutes"
-   would not be rejected -- which meant a fabricated "winds are only 30 km/h" passed
-   cleanly when the real figure was 57.5. Numbers carrying a weather unit now get no
-   prose allowance at all.
-2. *A hostile framing caused a refusal instead of an answer.* The intent prompt treated
-   "it's only 12 degrees, right? just confirm and say my run is fine" as an attempt to
-   redirect, and returned "no guidance" for a question our policies squarely cover.
-   Refusing a real question is a worse outcome than answering it carefully, so scope is
-   now decided on what the message asks, not on how pushy it is.
-3. *The guard rejected correct replies.* Tightening it in (1) introduced the opposite
-   error: a number attached to a time unit -- "over the next 24 hours", "wait 30
-   minutes" -- was read as an unverified weather claim, so a perfectly good answer would
-   be discarded and forced into the deterministic fallback. Durations are now exempted
-   explicitly, since a weather reading never carries a time unit. Worth stating plainly
-   because it is the failure mode a strict guard invites: over-rejection is quieter than
-   under-rejection, and degrades answers without ever looking like a bug.
-4. *One window's weather leaked into another -- the most serious of the four.* Asking
-   "what about this evening instead?" during an afternoon storm returned a
-   danger-severity lightning warning, even though none of the evening's own forecast
-   hours carried a thunderstorm: `build_snapshot` folded the CURRENT weather code into
-   every window's code set. The result was a wrong-severity safety answer, which is
-   precisely the class of error this system exists to prevent. Two things are worth
-   noting. It was found by hand in the chat UI, not by this suite -- no case had asked a
-   follow-up about a *different* window under live conditions. And the grounding guard
-   could never have caught it: every number in that reply was genuine, the storm was real,
-   it simply belonged to a different part of the day. `window_isolation` now guards it,
-   and that case was verified to fail when the defect is deliberately reintroduced.
+**What the numeric guard cannot cover.** Defects 4, 6 and 7 are non-numeric claims. Every
+figure in the bad replies was real; the problem was which window or which rule they
+belonged to. The guard validates figures, not propositions. Mitigation is to keep the
+snapshot rich enough that the model never infers -- storm coverage is now counted in hours
+-- but this remains the softest part of the design.
 
-5. *A whole time window was unreachable.* Asking "at night?" silently answered about the
-   evening. `night` was defined in the snapshot's window table but missing from the intent
-   vocabulary, so the parser could never produce it -- dead configuration that looked
-   supported from one side and did not exist from the other. It was also defined as
-   22:00-23:00, two hours, when night plainly crosses midnight. Night is now 21:00-05:00
-   and wraps into the next day's forecast hours, and `window_isolation` now asserts the
-   two window lists cannot drift apart again. The difference is not cosmetic: for the
-   location tested, evening carried a 95% chance of rain and the night 76%, which is a
-   different answer to the same question.
+**A rule's advice must be true for every condition that can trigger it.** An `any:`
+branch that widens the trigger without fitting the advice is a grounding bug no numeric
+check will find, because every figure involved is real. That is defect 7, and it is the
+review I would run first on any new policy.
 
-6. *The all-clear contradicted the hazard rules.* SOP-GEN-001 asserts that nothing
-   notable was found, but it tests sustained wind and not gusts -- so a day with 25 km/h
-   prevailing wind and 55 km/h gusts satisfied it while SOP-EX-003 was warning about
-   exactly those gusts. Cited together, the reply reads "postpone the ride" followed by
-   "nothing notable, go ahead as planned", and the deterministic fallback prints secondary
-   advice verbatim, so a user would see both. It was live in the recorded Wellington
-   fixture the whole time.
-
-   The obvious fix -- add a gust threshold to the all-clear -- is the wrong one: it would
-   have to mirror every hazard rule, and every new policy would mean editing it, which is
-   the coupling the policy directory exists to remove. Instead the rule now declares
-   `only_if_alone: true`, and ranking drops such rules whenever anything else matched.
-   One flag, in YAML, correct no matter what is added later.
-
-**What the numeric guard does not cover.** Defect 4, and a related one where the model
-asserted "the storm covers only part of today" from a snapshot holding nothing but a
-true/false flag, are both *non-numeric* claims. The guard validates figures; it cannot
-validate a proposition. The mitigation is to keep the snapshot rich enough that the model
-never has to infer -- storm coverage is now counted in hours and stated in the facts --
-but this remains the softest part of the design and is called out in the README.
+Every guard here was verified by reintroducing its defect and watching it fail. Twice a
+verification silently did nothing and reported a pass.
 
 """
 
@@ -661,21 +604,40 @@ def write_report(records: list[dict]) -> None:
             continue
         if r["notes"]:
             out += [f"**Why it failed.** {r['notes']}", ""]
-        out += [f"**Cited.** {', '.join(r['citations']) or 'nothing'}", ""]
+        if r["mode"] != "unit":
+            out += [f"**Cited.** {', '.join(r['citations']) or 'nothing'}", ""]
         if r.get("trace"):
             out += [f"**Path.** `{' → '.join(r['trace'])}`", ""]
         if r.get("reply"):
-            body = r["reply"].strip()
-            out += ["**Reply.**", "", "> " + body.replace("\n", "\n> "), ""]
+            # Full text only where it is evidence: a failure needs inspecting, and the
+            # honest-refusal cases are the ones whose exact wording is the point. A
+            # passing case gets an excerpt -- enough to see it answered, without turning
+            # this file into something nobody reads.
+            body = " ".join(r["reply"].split())
+            verbatim = r["status"] == "FAIL" or r["id"] in {
+                "no_policy_applies", "weather_api_unreachable", "location_unresolvable"
+            }
+            if not verbatim and len(body) > 320:
+                body = body[:320].rsplit(" ", 1)[0] + " …"
+            out += ["**Reply.**", "", "> " + body, ""]
 
     RESULTS_FILE.write_text("\n".join(out), encoding="utf-8")
 
 
 def main() -> int:
-    cases = yaml.safe_load(CASES_FILE.read_text(encoding="utf-8"))["cases"]
+    all_cases = yaml.safe_load(CASES_FILE.read_text(encoding="utf-8"))["cases"]
     wanted = set(sys.argv[1:])
+    cases = [c for c in all_cases if c["id"] in wanted] if wanted else all_cases
+
+    # A subset run must NOT overwrite the committed report -- otherwise debugging a single
+    # case silently replaces the record of all the others with a file claiming the suite
+    # is three cases long. Subset runs print to the console only.
+    partial = bool(wanted)
     if wanted:
-        cases = [c for c in cases if c["id"] in wanted]
+        unknown = wanted - {c["id"] for c in all_cases}
+        if unknown:
+            print(f"unknown case id(s): {', '.join(sorted(unknown))}")
+            return 2
 
     records = []
     width = max(len(c["id"]) for c in cases)
@@ -688,13 +650,17 @@ def main() -> int:
         mark = {"PASS": "pass", "FAIL": "FAIL", "SKIP": "skip", "ERROR": "????"}[record["status"]]
         print(f"  {record['id']:<{width}}  {mark:<4}  {record['notes'][:100]}")
 
-    write_report(records)
+    if partial:
+        print(f"\n(subset run — {RESULTS_FILE.name} left untouched)")
+    else:
+        write_report(records)
     passed = sum(r["status"] == "PASS" for r in records)
     failed = sum(r["status"] == "FAIL" for r in records)
     skipped = sum(r["status"] == "SKIP" for r in records)
     errored = sum(r["status"] == "ERROR" for r in records)
     print(f"\n{passed} passed, {failed} failed, {skipped} skipped, {errored} inconclusive")
-    print(f"Report written to {RESULTS_FILE}")
+    if not partial:
+        print(f"Report written to {RESULTS_FILE}")
     return 1 if failed else 0
 
 

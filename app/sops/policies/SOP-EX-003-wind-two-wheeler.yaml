@@ -18,6 +18,10 @@ applies_to:
 # Two branches:
 #   - a gust arriving 20+ km/h above the prevailing wind, once gusts clear 45
 #   - any gust at 65+, where the absolute force is enough regardless of differential
+#
+# Note the advice below avoids asserting that the wind is *gusty rather than strong*: the
+# second branch fires on a steady 62 km/h gusting to 66, where that would be untrue. A
+# rule's advice has to hold for every condition that can trigger it.
 match:
   any:
     - all:
@@ -26,9 +30,10 @@ match:
     - {field: wind_gusts_kmh, op: gte, value: 65}
 
 advice: |
-  Today's wind is gusty rather than merely strong, and that is the part that matters on
-  two wheels. The danger is not the effort of riding into it -- it's the sideways shove
-  that arrives without warning and can put you across a lane before you react.
+  The wind today is strong enough to be a safety problem on two wheels rather than just
+  hard work. What unseats riders is rarely the effort of pushing into it -- it's the
+  sideways shove, which arrives without warning and can put you across a lane before you
+  react.
 
   Postpone the ride if you can, or take an enclosed vehicle or public transport instead.
   If you're riding anyway: slow down well below your usual pace, keep both hands on the

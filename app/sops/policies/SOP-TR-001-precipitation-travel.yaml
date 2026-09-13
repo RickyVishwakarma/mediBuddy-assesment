@@ -13,15 +13,19 @@ applies_to:
 # nobody, while a 40% chance that turns into a downpour closes a road. What slows traffic
 # is water on the surface and reduced sight lines, so the rule tests those directly.
 #
-# Two branches:
-#   - meaningful accumulation arriving alongside degraded visibility
-#   - visibility under 2 km on its own, which disrupts traffic whatever the cause
+# Rain must actually be falling for this rule to fire. It once also had a
+# visibility-only branch, which meant it triggered on fog and then told the user "there's
+# enough water coming down to sit on the road surface" while the snapshot said 0.0 mm --
+# advice contradicting the data in the same reply. Reduced visibility with no rain is a
+# different hazard and now has its own policy, SOP-TR-004.
+#
+# The lesson generalises: a rule's advice text must be true for EVERY condition that can
+# trigger it. An `any:` branch that widens the trigger without fitting the advice is a
+# grounding bug the numeric guard cannot catch, because every figure involved is real.
 match:
-  any:
-    - all:
-        - {field: precipitation_mm, op: gte, value: 4}
-        - {field: visibility_km, op: lte, value: 5}
-    - {field: visibility_km, op: lte, value: 2}
+  all:
+    - {field: precipitation_mm, op: gte, value: 4}
+    - {field: visibility_km, op: lte, value: 5}
 
 advice: |
   Expect the journey to be slower than usual rather than dangerous. There's enough water

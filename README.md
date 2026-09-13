@@ -1,552 +1,317 @@
 # Weather-Advisory Support Bot
 
-A chat bot that answers outdoor-activity safety questions ("is it safe to bike to work in
-Bhopal today?") using live weather — where **every piece of advice comes from a written
-policy, never from the model's judgement**.
+Answers outdoor-activity safety questions ("is it safe to bike to work in Bhopal today?")
+from live weather — where **every piece of advice comes from a written policy, never from
+the model's judgement**.
 
-The model is allowed to do two things: understand what was asked, and word the reply. It
-does not decide what is safe, and it does not decide the numbers.
+> The weather API produces a typed **fact snapshot**; a data-driven **rule engine** picks
+> which policies match it; the model only **re-words** the matched policy; and a
+> deterministic **guard** discards the reply if it contains a number that isn't in the
+> snapshot.
 
----
-
-## Where everything is
-
-| What you asked for | Where |
+| Deliverable | Where |
 |---|---|
-| **Setup and run**, backend and frontend | [Quick start](#quick-start) — one command, then `http://localhost:8000` |
-| **The SOPs**, and why this form | [`app/sops/policies/`](app/sops/policies/) — 12 YAML files · [rationale](#the-sops) |
-| **The LangGraph implementation** | [`app/graph/`](app/graph/) — [state](app/graph/state.py), [nodes](app/graph/nodes.py), [wiring](app/graph/build.py) · [architecture](#architecture) |
-| **The eval suite and its results** | [`evals/`](evals/) · results in **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
-| **Honest notes on failures** | [What this suite did and didn't catch](#what-this-suite-did-and-didnt-catch) · [Known gaps](#known-gaps) |
+| Setup + run, backend and frontend | [Quick start](#quick-start) |
+| SOPs, and why this form | [`app/sops/policies/`](app/sops/policies/) · [why](#the-sops) |
+| LangGraph implementation | [`app/graph/`](app/graph/) · [architecture](#architecture) |
+| Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
+| Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-If you read only three things: the [grounding guard](app/guards/grounding.py), which is
-where "the model cannot invent numbers" is enforced; the
-[situational override](app/sops/policies/SOP-SYS-001-heavy-rain-system.yaml), which is the
-case the brief cares most about; and
-[what the suite didn't catch](#what-this-suite-did-and-didnt-catch), which is the honest
-account of what a green test run is worth here.
-
-**Current state:** 12 policies, 17 eval cases, last run **16 passed, 0 failed, 1 skipped**
-(the skip is deliberate — see [Evals](#evals)).
+**State:** 13 policies · 17 eval cases · last run **16 passed, 0 failed, 1 skipped**.
 
 ---
 
 ## Quick start
 
-Requires Python 3.11+.
+Python 3.11+.
 
 ```bash
-# 1. dependencies
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
+python -m venv .venv && .venv\Scripts\activate    # Windows
 pip install -r requirements.txt
-
-# 2. API key  (free: https://aistudio.google.com/apikey)
-copy .env.example .env          # Windows
-# cp .env.example .env          # macOS / Linux
-#   then edit .env and set GOOGLE_API_KEY=...
-
-# 3. run
+copy .env.example .env                            # then add GOOGLE_API_KEY
 uvicorn server.main:app --reload
 ```
 
-Then open **http://localhost:8000**. That serves both halves — FastAPI hosts the chat page
-itself, so there is no separate frontend build, no CORS, and no second process.
+Open **http://localhost:8000**.
 
-**Backend** — `uvicorn server.main:app --reload` on port 8000. Routes:
+**Backend** — FastAPI on 8000. `GET /` serves the UI · `POST /chat` takes
+`{session_id, message}` and returns `{reply, citations, no_guidance, failed, trace}` ·
+`GET /policies` lists the loaded rules.
 
-| Route | Purpose |
-|---|---|
-| `GET /` | serves the chat UI |
-| `POST /chat` | `{session_id, message}` → `{reply, citations, no_guidance, failed, trace}` |
-| `GET /policies` | the loaded policy set, so you can confirm which rules are live |
+**Frontend** — [`server/static/index.html`](server/static/index.html). One file, vanilla
+JS, no build step; FastAPI serves it, so there's no second process and no CORS. It puts a
+session id in `sessionStorage` which becomes the graph's `thread_id`, so a refresh starts
+a new session — matching "memory resets between sessions".
 
-**Frontend** — `server/static/index.html`. One file, vanilla JS, no build step. Type a
-question, get a reply in a thread, with the cited policy id shown under each answer. It
-generates a session id into `sessionStorage`, which becomes the graph's `thread_id`; a page
-refresh therefore starts a fresh session, matching the "memory resets between sessions"
-requirement.
-
-**Evals** — `python evals/run_evals.py`, which writes [EVAL_RESULTS.md](EVAL_RESULTS.md).
-
----
-
-## The one-sentence design
-
-> The weather API produces a **typed fact snapshot**; a **data-driven rule engine** decides
-> which policies match it; the model only re-words the matched policy — and a
-> **deterministic guard** discards the reply if it contains any number that isn't in the
-> snapshot.
-
-Everything below follows from that split.
+**Evals** — `python evals/run_evals.py`. Three cases are offline and need no API key.
 
 ---
 
 ## The SOPs
 
-**Form: one YAML file per policy in [`app/sops/policies/`](app/sops/policies/), discovered
-by glob at startup.**
-
-*Why this form:* YAML is reviewable and diff-able by someone who doesn't read Python, one
-file per rule means two people can edit two policies without a merge conflict, and glob
-discovery means adding a rule is adding a file — which is exactly the property the brief
-asks for.
-
-12 policies across 6 categories, spanning all five severities:
+**Form: one YAML file per policy in [`app/sops/policies/`](app/sops/policies/), found by
+glob at startup.** *Why:* YAML is reviewable by someone who doesn't read Python, one file
+per rule means two people can edit two policies without conflict, and glob discovery makes
+adding a rule the same thing as adding a file.
 
 | ID | Category | Severity | Fires when |
 |---|---|---|---|
-| `SOP-SYS-001` | situational_override | danger | A heavy-rain system is active — **overrides everything** |
+| `SOP-SYS-001` | situational_override | danger | Heavy-rain system active — **overrides everything** |
 | `SOP-TR-002` | travel_commute | danger | Thunderstorm in the asked-about window |
-| `SOP-TR-003` | travel_commute | danger | Rain onto ground at or below freezing — ice risk |
+| `SOP-TR-003` | travel_commute | danger | Rain onto ground at or below freezing — ice |
 | `SOP-EX-002` | outdoor_exercise | warning | Apparent temp ≥ 38 °C, or ≥ 33 °C with humidity ≥ 75% |
 | `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
-| `SOP-VG-001` | vulnerable_groups | warning | A child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
-| `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained outdoor activity |
+| `SOP-VG-001` | vulnerable_groups | warning | Child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
+| `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained activity |
 | `SOP-VG-002` | vulnerable_groups | caution | Older adult, apparent temp ≤ 5, or ≤ 12 with wind ≥ 30 |
-| `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky (pavement burns) |
-| `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or visibility ≤ 2 km |
-| `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet today |
-| `SOP-GEN-001` | general_conditions | info | Nothing notable — an explicit all-clear (`only_if_alone`) |
+| `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky — pavement burns |
+| `SOP-TR-004` | travel_commute | warning | Visibility ≤ 2 km — short sight lines, whatever the cause |
+| `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km |
+| `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
+| `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
 
-### The situational override — the case the brief cares most about
+### The situational override
 
-Open-Meteo does not publish "a well-marked low-pressure area exists." So `SOP-SYS-001`
-matches the **observable signature** of one, using the **India Meteorological Department's
-own published 24-hour rainfall classes** as thresholds — heavy 64.5–115.5 mm, very heavy
-115.6–204.4 mm, extremely heavy above that:
+Open-Meteo doesn't publish "a low-pressure system exists", so `SOP-SYS-001` matches its
+**observable signature**, using the IMD's published 24h rainfall classes:
 
 ```yaml
 match:
   any:
-    - {field: rain_class_rank, op: gte, value: 4}          # IMD "heavy" or worse
-    - all:                                                  # or: substantial rain
-        - {field: rain_24h_mm, op: gte, value: 35}          # arriving with
-        - {field: gust_peak_24h_kmh, op: gte, value: 45}    # squally gusts
+    - {field: rain_class_rank, op: gte, value: 4}      # IMD "heavy" (≥64.5 mm) or worse
+    - all:                                              # or substantial rain
+        - {field: rain_24h_mm, op: gte, value: 35}      # arriving with
+        - {field: gust_peak_24h_kmh, op: gte, value: 45}  # squally gusts
 override: true
 ```
 
-The second branch is the one that matters. It catches exactly the situation the brief
-describes — where no single reading looks extreme but the situation plainly is. The eval
-suite's recorded severe-weather fixture found a real day (Mumbai, 2026-07-23, 107 mm with
-64 km/h gusts) where **four** policies matched at once and this one still led.
+The second branch is the point: it catches the case where no single reading looks extreme
+but the situation is. **Aggregation lives in code so a policy can name a _regime_ rather
+than a reading** — `build_snapshot` derives `rain_class`, `heavy_rain_regime` and friends,
+and the rule refers to them. No event, city or date is hardcoded anywhere.
 
-The general principle: **aggregation lives in code, so a policy can name a _regime_ rather
-than a reading.** `build_snapshot` computes `rain_24h_mm`, `rain_class`, `rain_class_rank`
-and `heavy_rain_regime` from the raw payload; the policy then refers to those by name. No
-event, city or date is hardcoded anywhere.
+### Three rules that key on the causal variable
 
-### Three rules where the obvious threshold is the wrong one
+The obvious threshold is often a proxy for the hazard rather than its cause:
 
-Some of the most natural-sounding weather rules key on the wrong variable. Three of these
-deliberately don't:
+- **`SOP-EX-003` — gust differential, not wind speed.** A steady 45 km/h headwind is
+  predictable; 20 km/h gusting to 55 is what puts a rider across a lane.
+- **`SOP-TR-001` — rainfall intensity, not probability.** A 90% chance of drizzle delays
+  nobody; a 40% chance that becomes a downpour closes a road. Short sight lines are a
+  separate hazard with their own rule, since fog needs different advice from rain.
+- **`SOP-EX-001` — UV dose, with no clock condition at all.** "Is it 11am–4pm" is a proxy
+  for "is the sun strong". The snapshot already computes UV for the window asked about, so
+  the rule tests that directly and stays quiet at 19:00 on its own.
 
-**Wind on two wheels — `SOP-EX-003` keys on gust *differential*, not wind speed.** A steady
-45 km/h headwind is exhausting but predictable; you lean into it and it stays there. A
-20 km/h prevailing wind gusting to 55 is the dangerous one, because the load arrives
-sideways with no warning. A threshold on raw speed cannot tell those apart — it
-over-warns on the steady day and stays silent on the genuinely hazardous one. The rule
-fires when gusts run 20 km/h above the prevailing wind (once gusts clear 45), or on
-absolute force at 65.
+### The fuzzy rule
 
-**Travel rain — `SOP-TR-001` keys on intensity and visibility, not probability.** A 90%
-chance of drizzle delays nobody; a 40% chance that becomes a downpour closes a road. What
-actually slows a journey is water on the surface and shortened sight lines, so the rule
-tests those directly.
-
-**UV — `SOP-EX-001` keys on dose, and has no clock-time condition at all.** UV harm is
-intensity × time, so the rule is scoped to sustained activities and set at 6 rather than
-the "very high" 8. And checking "is it between 11:00 and 16:00" is only ever a *proxy* for
-"is the sun strong" — since the snapshot already computes UV for the window the user asked
-about, the rule tests the thing itself. Ask about 19:00 and `uv_index` is low, so it stays
-quiet without needing any rule about hours.
-
-### The fuzzy policy
-
-`SOP-LP-001` ("is today good for a picnic?") has no threshold to check — 24 °C with an 80%
-chance of a shower is a bad picnic day while breaching no hazard limit. So its condition is
-written in prose and evaluated by a generic judge:
-
-```yaml
-match:
-  any:
-    - semantic: >
-        Conditions would make an unhurried outdoor sit-down of two or three hours
-        unpleasant or unreliable... treat a day that is merely imperfect, but still
-        workable, as NOT matching.
-    - {field: comfort_index, op: lte, value: 35}     # deterministic backstop
-```
-
-Three things keep this honest:
-
-1. **One generic judge serves every `semantic:` condition**, so a new fuzzy rule is still
-   just a YAML file. See [`app/llm/semantic.py`](app/llm/semantic.py).
-2. **The judge returns only a boolean.** The advice text is entirely the policy's, either way.
-3. **It fails closed.** If the model is unreachable the condition does not hold, and the
-   deterministic `comfort_index` floor still catches a clearly miserable day.
-
-This is the one place a model makes a *decision* rather than composing language. That is a
-deliberate, bounded trade, and it is listed under Known gaps below.
+"Is today good for a picnic" has no threshold, so `SOP-LP-001` states its condition in
+prose and a **single generic judge** ([`llm/semantic.py`](app/llm/semantic.py)) evaluates
+it — so a new fuzzy rule is still just a YAML file. Three things keep it honest: the judge
+returns **only a boolean** (the advice text is entirely the policy's), it **fails closed**
+when the model is unreachable, and a deterministic `comfort_index ≤ 35` backstop still
+catches a clearly miserable day.
 
 ### Adding a policy without touching code
 
-Drop a `.yaml` file into `app/sops/policies/` and restart (`--reload` does it for you).
-That's the whole procedure.
+Drop a `.yaml` into `app/sops/policies/` and restart. That's it — rehearsed, and it
+changed **zero files outside that directory**.
 
-It works because the snapshot exposes a **fixed, documented vocabulary** that new rules draw
-from — listed in [`app/vocabulary.py`](app/vocabulary.py) — rather than each rule needing its
-own plumbing. A policy author needs that file and nothing else.
-
-**Field names are validated at load time.** A rule referring to a field that doesn't exist
-would be accepted happily and then never fire, because an absent field evaluates to false —
-a safety rule that looks live but is dead, which is the worst failure this system has. So
-the loader rejects unknown fields outright and suggests the nearest real one:
+It works because the snapshot exposes a fixed vocabulary, documented in
+[`app/vocabulary.py`](app/vocabulary.py), which is the only file a policy author needs.
+**Field names are validated at load**, because a typo would otherwise produce a rule that
+loads cleanly and never fires:
 
 ```
-SOPValidationError: match: unknown snapshot field 'temperature_celsius'.
-A rule referring to a field that does not exist would never fire.
-Did you mean: temperature_c, apparent_temperature_c?
-See app/vocabulary.py for the full list.
-```
-
-That check exists because this is the mistake a policy author working without the Python is
-most likely to make, and silence would be the worst possible response to it.
-
-```yaml
-# app/sops/policies/SOP-XX-001-my-new-rule.yaml
-id: SOP-XX-001
-title: Something worth warning about
-category: my_category
-severity: caution
-applies_to:
-  activities: [cycling, running]
-match:
-  all:
-    - {field: humidity_pct, op: gte, value: 90}
-    - {field: temperature_c, op: gte, value: 30}
-advice: |
-  What we want the user told.
+unknown snapshot field 'temperature_celsius'. A rule referring to a field that does
+not exist would never fire. Did you mean: temperature_c, apparent_temperature_c?
 ```
 
 ---
 
 ## Architecture
 
-A LangGraph with **five conditional edges**, **three terminal response nodes**, and **one
-cycle**. Generated with `python -m app.graph.build --mermaid`:
+**5 conditional edges, 4 terminal nodes, 1 cycle.** Emitted by
+`python -m app.graph.build --mermaid`, so it can't drift from the code.
 
 ```mermaid
 graph TD
-    START([user turn]) --> PI[parse_intent<br/>LLM #1]
+    START([turn]) --> PI[parse_intent<br/>LLM #1]
     PI -->|in scope| RL[resolve_location]
     PI -->|out of scope| NM[no_match_response]
-    PI -->|model down| FR[failure_response]
-    RL -->|resolved| FW[fetch_weather]
-    RL -->|not found| FR
+    RL -->|ok| FW[fetch_weather]
+    RL -->|not found| FR[failure_response]
     FW -->|ok| BS[build_snapshot]
-    FW -->|error / timeout| FR
-    BS --> MS[match_sops<br/>rule engine + LLM #2 for fuzzy]
-    MS -->|>=1 match| RS[rank_and_select]
-    MS -->|zero matches| NM
+    FW -->|error| FR
+    BS --> MS[match_sops<br/>rules + LLM #2 for fuzzy]
+    MS -->|match| RS[rank_and_select]
+    MS -->|none| NM
     RS --> CA[compose_answer<br/>LLM #3]
     CA --> VG{verify_grounding}
     VG -->|pass| E([END])
-    VG -->|fail, 1st| CA
-    VG -->|fail, 2nd| DR[deterministic_render]
+    VG -->|fail 1st| CA
+    VG -->|fail 2nd| DR[deterministic_render]
     DR --> E
     NM --> E
     FR --> E
 ```
 
-The **cycle** (`verify_grounding → compose_answer`) is the part a chain cannot express:
-retry the composition under a stricter prompt, and if it fails again leave by a different
-exit entirely.
-
-`parse_intent` can exit straight to `no_match_response`, so an out-of-scope question never
-spends a geocoding or weather call — and the "no guidance" path stays visibly distinct from
-the "couldn't get data" path in the trace.
+The **cycle** is what a chain cannot express: retry under a stricter prompt, and on a
+second failure leave by a different exit. Termination is bounded by `compose_attempts` in
+state.
 
 ### Deterministic code vs. the model
 
 | Decision | Who | Why |
 |---|---|---|
-| What the user is asking | **Model** | Natural language is what it's for; bounded by a pydantic schema |
+| What was asked | **Model** | Language understanding, bounded by a pydantic schema |
 | Whether a fuzzy condition holds | **Model** | No threshold exists; bounded to one boolean |
 | Wording of the reply | **Model** | Composition only |
 | Which branch the graph takes | **Code** | Routers are pure functions — no model call below the `# routers` line in [`nodes.py`](app/graph/nodes.py) |
-| What the weather is | **Code** | Straight from the API into a typed snapshot |
-| Which policies match | **Code** | DSL evaluator over the snapshot |
-| Which policy wins a conflict | **Code** | Deterministic sort |
-| Whether the reply may ship | **Code** | Grounding guard — can discard the model's output entirely |
+| What the weather is | **Code** | API → typed snapshot |
+| Which policies match | **Code** | DSL over the snapshot |
+| Which policy wins | **Code** | Deterministic sort |
+| Whether the reply ships | **Code** | Guard can discard the model's output |
 
-At most three model calls happen per question, and each is constrained:
+Three model calls per question: intent (schema-bound), the fuzzy judge (boolean only), and
+compose (sees pre-rendered fact *strings*, never raw JSON).
 
-| # | Where | Model | Constraint |
-|---|---|---|---|
-| 1 | `parse_intent` | fast | `response_schema` pydantic model — has no field in which to express an opinion about safety |
-| 2 | `match_sops` (fuzzy only) | fast | returns `{matches: bool, reason: str}` and nothing else |
-| 3 | `compose_answer` | compose | sees pre-rendered fact strings + policy text, never raw JSON; output must pass the guard |
+### Component boundaries
 
-Calls 1 and 2 are constrained classification into a fixed schema, so they run on a lite
-model; only call 3 produces anything a user reads. The provider swap surface is the two
-functions in [`client.py`](app/llm/client.py) — `structured()` and `text()`.
+Each seam is placed so the thing on one side is testable without the other:
 
-### Where the component boundaries are, and why
-
-Each seam was placed so that the thing on one side can be tested without the thing on the
-other. That test is what decided every boundary here.
-
-| Seam | What crosses it | What that buys |
+| Seam | Crosses | Buys |
 |---|---|---|
-| `weather/` → `sops/` | the **snapshot**, and nothing else | `weather/` knows no policy exists; `sops/` knows no API exists. The engine can be unit-tested against a hand-written dict, which is how the rules were verified before any LLM was wired up. |
-| `sops/` → `llm/` | a **judge callable**, injected | [`engine.py`](app/sops/engine.py) has no LLM import at all. Policy matching is therefore deterministic, offline, and network-free for 11 of 12 rules — and the fuzzy one fails closed when the judge is absent. |
-| everything → `graph/` | thin **node adapters** | Nodes marshal state; they hold no domain logic. That's why `nodes.py` is not the biggest file in the repo despite touching every component. |
-| model → user | the **grounding guard** | [`grounding.py`](app/guards/grounding.py) depends only on a snapshot and an SOP. It has no idea a graph or a model exists, so it can be tested by handing it a fabricated reply — which is exactly how the "30 km/h" hole was found. |
+| `weather/` → `sops/` | the snapshot | the engine unit-tests against a hand-written dict |
+| `sops/` → `llm/` | an injected callable | [`engine.py`](app/sops/engine.py) has **no LLM import**; 11 of 12 rules match offline |
+| everything → `graph/` | thin node adapters | nodes marshal state, hold no domain logic |
+| model → user | the guard | [`grounding.py`](app/guards/grounding.py) takes a snapshot and an SOP, nothing else |
 
-The practical consequence: the weather layer, the rule engine and the guard were each
-built and verified **before** the graph existed. If the seams were in the wrong places
-that wouldn't have been possible.
+The weather layer, rule engine and guard were each built and verified **before the graph
+existed**.
 
 ### Conflict resolution — chosen deliberately
 
-When several policies apply, [`engine.py`](app/sops/engine.py) sorts by:
+Sort by **override → severity → specificity → id**. The top policy leads; up to two others
+get a sentence; all appear in `citations`.
 
-1. **override first** — a rain system reframes the whole question rather than being one
-   hazard among peers
-2. then **severity**
-3. then **specificity** — a rule that needed four conditions to hold describes the situation
-   more precisely than one that cleared a single threshold
-4. then **id**, purely so runs are reproducible
+*Why:* suppressing a second genuine hazard is a safety regression, but five equal warnings
+means none gets acted on. One clear instruction, briefly qualified, full set auditable.
 
-**The top policy leads the answer; up to two others get a sentence each; all of them appear
-in `citations`.**
-
-One exception, and it exists because of a real bug. A policy marked `only_if_alone` — the
-all-clear — is dropped as soon as anything else matches. It asserts that *nothing notable
-was found*, so cited beneath a warning it makes the reply contradict itself: "postpone the
-ride", then "nothing notable, go ahead as planned". That happened, because the all-clear
-tests sustained wind and not gusts. The fix is the flag rather than copying gust
-thresholds into the all-clear, since that would couple it to every policy added afterwards.
-
-Why not just pick one: suppressing a second genuine hazard is a safety regression — if it's
-both high-UV and high-wind, the rider needs both. Why not list them equally: five equal
-warnings means none of them gets acted on. So: one clear instruction, briefly qualified,
-with the full set available for audit.
+One exception: a policy marked `only_if_alone` (the all-clear) is dropped as soon as
+anything else matches — it asserts *nothing notable was found*, so beneath a warning it
+contradicts itself. That happened for real.
 
 ### Session memory
 
-A `MemorySaver` checkpointer keyed on `thread_id`. Carried across turns: the message
-history, `last_location`, `last_activity`. **Not carried: the weather.**
+`MemorySaver` keyed on `thread_id`. Carried across turns: messages, `last_location`,
+`last_activity`. **Not carried: the weather.**
 
 ```
-Turn 1  "is it safe to cycle in Wellington this afternoon?"   → resolves Wellington, cycling
-Turn 2  "what about this evening instead?"                    → inherits both, re-fetches weather
+"is it safe to cycle in Wellington this afternoon?"  → resolves Wellington, cycling
+"what about this evening instead?"                   → inherits both, re-fetches weather
 ```
 
-That distinction is deliberate. Carrying intent forward is what stops the user repeating
-themselves; carrying *facts* forward is what would let turn three answer with turn one's
-numbers. Since policy selection is a deterministic function of `(snapshot, intent)`, the
-only way two turns disagree is that conditions genuinely changed.
-
-`_fresh_turn()` in [`nodes.py`](app/graph/nodes.py) clears last turn's scratch at the top of
-each question — without it, a stale `failure` would route a perfectly good question straight
-to the error path.
+Carrying intent stops the user repeating themselves; carrying *facts* would let turn three
+answer with turn one's numbers. Since selection is deterministic in `(snapshot, intent)`,
+two turns can only disagree when conditions actually changed.
 
 ---
 
-## How the four hard guarantees are enforced
+## How the guarantees are enforced
 
-**1. Every answer cites a policy, or says none applies.**
-`citations` is a first-class field on the response, not something parsed back out of the
-prose — so "why did it say that" is answerable mechanically. The guard independently
-requires the policy id to appear in the text.
+**Cites a policy or says none applies.** `citations` is a first-class response field, not
+parsed out of prose. All four terminal nodes set it, or set `no_guidance`/`failed`.
 
-**2. Never reports a forecast it doesn't have.**
-`failure_response` is a fixed template that interpolates nothing but the place name the user
-typed. It cannot contain a forecast even in principle. Geocoding returning zero results,
-geocoding erroring, the forecast endpoint erroring, a timeout, and a 200 response with no
-`current` block all route to it.
+**Never a forecast it doesn't have.** `failure_response` makes no model call and never
+reads the snapshot — it cannot contain a forecast. Geocoding empty, geocoding error,
+forecast error, timeout, and a 200 with no `current` block all route to it.
 
-**3. Never invents advice.**
-`no_match_response` is a fixed string.
+**Never invents advice.** `no_match_response` returns a fixed constant.
 
-**4. Numbers come from the API.**
-[`app/guards/grounding.py`](app/guards/grounding.py) — this is the file to point at.
+**Numbers come from the API** — [`app/guards/grounding.py`](app/guards/grounding.py):
 
 ```
-check(draft, snapshot, selected_sop):
-  allow-set = every numeric value in the snapshot (0 and 1 dp)
-            + every number in the cited policies' own text
-
-  durations are stripped first ("over the next 24 hours", "wait 30
-  minutes") — a weather reading never carries a time unit
-
-  pass 1 — numbers carrying a weather unit ("30 km/h", "20 C", "60%",
-           "a UV index of 8") must be in the allow-set. No prose allowance.
-  pass 2 — every other number must be in the allow-set, or be a
-           small unit-less count (0–10) as ordinary prose.
-
-  any number failing either pass          → REJECT
-  policy id missing, or a policy id cited
-  that wasn't selected                    → REJECT
-
-  on reject: retry once with a stricter prompt,
-  then render the policy deterministically instead
+allow-set = every numeric value in the snapshot + every number in the cited policies
+durations stripped first ("over the next 24 hours") — a reading never carries a time unit
+pass 1: numbers with a weather unit ("30 km/h", "20 C", "60%") must be in the allow-set
+pass 2: everything else must be too, or be a small unit-less count (0–10)
+reject → retry once stricter → then render the policy deterministically
 ```
 
-The two-pass split matters, and it came out of probing my own guard rather than trusting
-it. An earlier version allowed a fixed list of "prose" numbers (15, 20, 30, 45, 60, 90)
-so phrases like "wait 30 minutes" wouldn't be rejected — which meant a hallucinated
-**"winds are only 30 km/h"** passed cleanly when the real figure was 57.5. Unit-bearing
-numbers now get no such allowance, and policy-authored figures are permitted explicitly
-instead of by coincidence.
+Also rejects a reply citing a policy id that wasn't selected, which is what stops a user
+talking it into confirming a policy that doesn't exist.
 
-Tightening it then introduced the opposite error, which is worth naming because it is the
-failure a strict guard invites: "over the next 24 hours" was read as an unverified weather
-claim, so a correct reply would be discarded and forced into the deterministic fallback.
-**Over-rejection is quieter than under-rejection** — it degrades answers without ever
-looking like a bug. Durations are now stripped before the scan, since a weather reading
-never carries a time unit.
+**The honest limit:** a cited policy's own thresholds are allowed, so the bot can say "our
+guidance applies above 50 km/h". So the defensible claim is slightly narrower than "every
+number came from the API":
 
-The last rejection rule is what stops a user talking the bot into confirming a policy
-that doesn't exist. Upstream, `compose_answer` receives pre-rendered fact *strings*,
-never the raw JSON — the prompt is the hint, the guard is the enforcement.
+> **No number in a reply is ever originated by the model.** Each traces to the API
+> response for that request, or to a reviewed policy file.
 
-**The residual, stated precisely.** A cited policy's own thresholds are in the allow-set,
-so the bot can say "our guidance applies above 50 km/h". That means a reply *could* state
-a threshold in a way that reads like an observation — "gusts to 45 km/h" would pass while
-citing `SOP-SYS-001`, because 45 is a threshold in that policy. So the guarantee I can
-actually defend is slightly narrower than "every number came from the API":
-
-> **No number in a reply is ever originated by the model.** Every one traces either to
-> the API response for that request, or to a reviewed policy file. The set of non-API
-> numbers is finite, auditable, and version-controlled.
-
-Closing this fully would need the guard to distinguish "quoting a rule" from "reporting a
-reading", which is a semantic judgement I'd rather not put back into the model.
-
-**The larger limitation: the guard checks numbers, not propositions.** A reply saying
-*"the storm only covers part of today, so you can plan around it"* contains no figure at
-all, so the guard has nothing to check — yet it is a factual claim about the weather, and
-early on the model was making it from a snapshot that held only a true/false flag. The
-mitigation is to keep the snapshot rich enough that the model never needs to infer: storm
-coverage is now counted in hours and stated in the facts, so the claim is either supported
-or the policy forbids making it. But this is the softest part of the design, and the place
-I would invest next — likely a second deterministic check that every factual assertion
-maps to a snapshot field, not just every number.
+And the guard checks **numbers, not propositions** — "the storm covers only part of today"
+contains no figure. Mitigated by making the snapshot rich enough that the model needn't
+infer; this is the softest part of the design.
 
 ---
 
 ## Evals
 
-`python evals/run_evals.py` → [EVAL_RESULTS.md](EVAL_RESULTS.md), which records for every
-case what is being checked, what a pass means, and what actually happened. Failures stay in
-the file.
+`python evals/run_evals.py` → [EVAL_RESULTS.md](EVAL_RESULTS.md), which states per case
+what is checked, what a pass means, and what happened.
 
-### Live weather does not hold still — how the suite handles it
+**Live weather doesn't hold still**, so the suite is split:
 
-This is the wrinkle the brief raises, and it shaped the whole design. Cases are split:
+- **Behavioural cases replay recorded fixtures** — real Open-Meteo responses for real
+  places on real dates, provenance stamped, no value edited.
+- **Fixtures are chosen by running the real matcher** over candidate days and keeping one
+  where the intended policy leads, so a fixture can't quietly stop testing its claim.
+- **The live severe case reports SKIPPED, never a vacuous pass.** It cannot be made to
+  pass on demand — that's the point. It is skipping now.
+- **Invariants that hold in any weather run live**: numbers in reply ⊆ numbers from API,
+  cited policy == engine-selected policy, no selection ⟹ the no-guidance phrase.
 
-- **Behavioural cases replay recorded fixtures.** Each fixture is a *real* Open-Meteo
-  response for a real place on a real date — pulled from the same `/v1/forecast` endpoint
-  the app uses (via `past_days`, so the payload shape is identical), stamped with its
-  provenance, with no value edited. These keep testing the same behaviour in six months.
+**Adversarial:** three cases — numeric coercion, fabricated policy, prompt injection. I
+rate **numeric coercion** highest: a jailbroken tone is embarrassing, but a confidently
+wrong *number* is what a user acts on.
 
-- **Fixtures are chosen by running the real matching engine over candidate days** and
-  keeping one where the intended policy actually leads
-  ([`record_fixtures.py`](evals/record_fixtures.py)). A fixture therefore cannot quietly
-  stop testing what it claims to test. Re-record with `python evals/record_fixtures.py`.
+### What the suite missed
 
-- **The live severe-weather case scans real cities for one currently in a heavy-rain
-  regime.** If none exists, it reports **SKIPPED** — never a vacuous pass. It cannot be made
-  to pass on demand, which is the point.
+Seven defects surfaced while building this. **The suite found one.** The rest came from
+probing the guard with a fabricated reply, reading the fallback's real output, asking
+ordinary follow-ups in the chat UI, and auditing the policies for pairs that contradict.
+All seven are in [EVAL_RESULTS.md](EVAL_RESULTS.md).
 
-- **Invariants that hold on any day** run live regardless of conditions: every number in the
-  reply is one the API returned, the cited policy is the one the engine selected, and no
-  selection means the no-guidance phrase appears.
+The worst — one window's weather leaking into another, giving a danger-severity lightning
+warning for a storm-free evening — **the grounding guard could never have caught**: every
+figure was real, the storm was real, it belonged to a different part of the day.
 
-### On the adversarial case
+A suite tests the failures you already imagined. Every guard here was verified by
+reintroducing the defect and watching it fail; twice a verification silently did nothing
+and reported a pass.
 
-The brief offers prompt injection and invites an alternative. I run **three**, and rate
-**numeric coercion** (`adversarial_numeric_coercion`) as the most important:
-
-> A jailbroken tone is embarrassing. A confidently wrong *number* is what a user actually
-> acts on — and it is the failure the grounding guard exists to stop. Injection tries to
-> change how the bot talks; numeric coercion tries to change what it reports as true.
-
-The other two cover fabricated-policy confirmation and classic instruction override.
+The last one generalises into a review I'd run on any new policy: **a rule's advice must
+be true for every condition that can trigger it.** `SOP-TR-001` fired on low visibility
+alone and then told a user "there's enough water coming down" beside a reading of
+0.0 mm. Three more `any:` branches had the same shape. No numeric guard catches this —
+every figure involved is real.
 
 ---
 
-## What this suite did and didn't catch
-
-Worth stating plainly, because it qualifies how much the green run above is worth.
-
-Six real defects surfaced while building this. **The eval suite found one of them.** The
-other five came from deliberately probing the system: feeding the guard a fabricated
-reply, reading the deterministic fallback's actual output, asking ordinary follow-up
-questions in the chat UI ("what about this evening?" and "at night?" each exposed a
-different bug), and auditing the policy set for rules that contradict each other. All six
-are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md), and each now has a case guarding it.
-
-The most serious — one window's weather leaking into another, producing a danger-severity
-lightning warning for a storm-free evening — is the clearest illustration of the limit. No
-eval had asked a follow-up about a *different* window under live conditions, and the
-grounding guard could never have caught it: every figure in that reply was real, the storm
-was real, it simply belonged to a different part of the day.
-
-The lesson I'd carry forward is that a suite tests the failures you already imagined.
-Manual probing is how you find the ones you didn't, and the two are not substitutes.
-
-A second habit that earned its keep: **every regression guard here was verified by
-reintroducing the defect and watching it fail.** Twice a verification silently did nothing
-and reported a pass — once because a patch script never applied, once because a test
-matched `api.open-meteo.com`, which is a substring of `geocoding-api.open-meteo.com`, and
-so stubbed the wrong call. A guard you have not seen fail is not yet a guard.
-
 ## Known gaps
 
-Stated plainly rather than left to be discovered.
-
-1. **A policy needing a weather variable we never request does need a one-line code
-   change** — the field lists in [`openmeteo.py`](app/weather/openmeteo.py). Mitigated by
-   requesting a deliberately generous list up front, but the limit is real: if a reviewer
-   asks for a rule keyed on, say, soil moisture, that is a code edit.
-
-2. **The fuzzy judge is the one place a model makes a decision rather than composing
-   language.** Advice text is still entirely from YAML and numbers are still
-   guard-enforced, but the boolean is model judgement. The deterministic `comfort_index`
-   backstop limits the blast radius; it does not eliminate it.
-
-3. **Geocoding takes the first candidate silently.** The brief accepts this, and the
-   resolved name is echoed in the reply so a wrong match is visible — but it genuinely
-   misfires. Building this, live geocoding resolved *Kochi* to Kochi **Japan** (not
-   Kerala), *Goa* to **Genoa, Italy**, and *Mangalore* to Mangalore, **Tasmania**. Those
-   are real results from the endpoint, not hypotheticals. A production version should
-   disambiguate when candidates span countries.
-
-4. **`SOP-SYS-001` infers a rain system from rainfall and gust signatures** because
-   Open-Meteo has no low-pressure or cyclone feed. It is a proxy for an IMD bulletin, and
-   is described as one — not as ground truth.
-
-5. **Free-tier Gemini quota is tight, and it is counted _per model per day_.** Building
-   this, `gemini-2.5-flash` turned out to allow only 20 requests/day on the key I used,
-   which a single eval run exhausts. Three things came out of that:
-   - The app uses **two models** — a lite model for intent extraction and the fuzzy judge
-     (constrained classification, where a small model is as good), and a fuller model for
-     the user-facing prose. Sensible on its own merits, and it spreads the per-model
-     daily budget.
-   - The client **retries per-minute limits with backoff but fails fast on per-day
-     limits**, since the server sends a misleading ~60s retry hint for both and waiting
-     out a daily cap is pointless.
-   - The eval runner marks a quota-blocked case **INCONCLUSIVE**, not FAIL. It never
-     exercised the behaviour it tests, and calling that a failure would misreport the
-     system as much as calling it a pass.
-
-   If you hit this, set `GEMINI_MODEL_FAST` / `GEMINI_MODEL_COMPOSE` in `.env` to models
-   with remaining quota. The bot degrades honestly either way — it says it cannot process
-   the request rather than guessing.
+1. **A policy needing a variable we never request** does need a one-line change to the
+   field list in [`openmeteo.py`](app/weather/openmeteo.py). Mitigated by requesting
+   generously, but the limit is real.
+2. **The fuzzy judge is the one place a model decides rather than composes.** Bounded to a
+   boolean with a deterministic backstop; not eliminated.
+3. **Geocoding takes the first candidate.** It misfires — live, "Kochi" resolved to Kochi
+   **Japan**, "Goa" to **Genoa, Italy**. The resolved name is echoed so it's visible.
+4. **`SOP-SYS-001` infers a rain system** from rainfall and gust signatures; it's a proxy
+   for an IMD bulletin, not ground truth.
+5. **Free-tier quota is per model per day.** The app splits across two models and fails
+   fast on daily caps, but two things using the bot at once will trip the per-minute limit
+   and drop replies to the plainer deterministic path.
 
 ---
 
@@ -554,25 +319,12 @@ Stated plainly rather than left to be discovered.
 
 ```
 app/
-  vocabulary.py          the contract between policy authors and the intent parser
-  weather/
-    openmeteo.py         geocoding + forecast; pinned field lists; one error type
-    snapshot.py          typed fact snapshot + derived fields  ← single source of numeric truth
-  sops/
-    policies/*.yaml      the 11 policies  ← the only thing a policy owner touches
-    schema.py            validation; a malformed policy fails loudly at load
-    loader.py            glob discovery
-    engine.py            condition DSL + ranking; no LLM import
-  llm/
-    client.py            structured() and text() — the whole provider-swap surface
-    semantic.py          the one generic fuzzy-condition judge
-    prompts/*.md         editable without touching code
-  guards/grounding.py    ← numeric grounding enforcement
-  graph/
-    state.py  nodes.py  build.py
-server/
-  main.py                FastAPI
-  static/index.html      chat UI
-evals/
-  cases.yaml  run_evals.py  record_fixtures.py  fixtures/*.json
+  vocabulary.py        the contract between policy authors and the intent parser
+  weather/             openmeteo.py (API) · snapshot.py (the numeric source of truth)
+  sops/                policies/*.yaml · schema.py · loader.py · engine.py (no LLM import)
+  llm/                 client.py (provider swap surface) · semantic.py · prompts/*.md
+  guards/grounding.py  numeric grounding enforcement
+  graph/               state.py · nodes.py · build.py
+server/                main.py (FastAPI) · static/index.html (chat UI)
+evals/                 cases.yaml · run_evals.py · record_fixtures.py · fixtures/*.json
 ```

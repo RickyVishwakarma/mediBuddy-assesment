@@ -19,10 +19,13 @@ applies_to:
 # UV index for the window the user actually asked about, the rule can test the thing
 # itself instead of the proxy. Ask about 19:00 and uv_index is low, so this stays quiet
 # without needing a rule about hours at all.
+# Deliberately a single condition on the WINDOW's own UV reading. An earlier version also
+# fired on uv_max_24h >= 9, the day's peak -- which meant asking about 19:00 on a fierce
+# day triggered advice opening "the sun is strong enough...", untrue for the window asked
+# about. It also reintroduced exactly the proxy this rule exists to avoid: the daily
+# maximum stands in for "is the sun strong now" the same way clock hours did.
 match:
-  any:
-    - {field: uv_index, op: gte, value: 6}
-    - {field: uv_max_24h, op: gte, value: 9}
+  {field: uv_index, op: gte, value: 6}
 
 advice: |
   The sun is strong enough that the length of your session matters more than the moment
@@ -40,8 +43,7 @@ advice: |
   waterside and open-paved routes are worse than they look.
 
 compose_notes: >
-  Quote the UV index for the window asked about. If the daily maximum drove the match
-  rather than the window reading, say so and name the quieter part of the day.
+  Quote the UV index for the window asked about.
 
 rationale: >
   UV injury is cumulative rather than threshold-based, which is why this is scoped to

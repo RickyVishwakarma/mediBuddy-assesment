@@ -1,0 +1,40 @@
+id: SOP-TR-004
+title: Sight lines too short to travel normally
+category: travel_commute
+severity: warning
+override: false
+
+applies_to:
+  activities: [commute, driving, motorcycle, cycling, walking, running, pet_walk]
+  intent_hint: "user is travelling or on foot when they cannot see far ahead"
+
+# Visibility alone, whatever is causing it -- fog, mist, haze, smoke, or rain heavy enough
+# to obscure. Split out from the rain rule because the two need different advice: at
+# 0.7 km with no precipitation the road is dry and the danger is entirely about being
+# seen and about reaction distance, so advice written around standing water would be
+# simply untrue.
+match:
+  {field: visibility_km, op: lte, value: 2}
+
+advice: |
+  You cannot see far enough ahead to travel at normal speed. At this distance a stationary
+  vehicle, a cyclist or a pedestrian appears with very little warning, and the instinct to
+  keep up with surrounding traffic is what turns that into a collision.
+
+  Slow to a speed that lets you stop within the distance you can actually see, and leave
+  far more space than feels necessary -- the driver behind is working with the same short
+  sight line. Use dipped headlights or fog lights rather than main beam, which reflects
+  back off fog and makes things worse. Do not overtake.
+
+  On foot or on a bike, assume you are effectively invisible: wear something reflective,
+  use lights even in daytime, and take extra care at crossings and junctions where drivers
+  are looking for gaps rather than for you.
+
+compose_notes: >
+  State the visibility figure in kilometres -- it is the one number that makes the risk
+  concrete. Do not describe the road as wet unless the precipitation figure shows rain.
+
+rationale: >
+  Short sight distance is a hazard in its own right and is not implied by any rainfall
+  threshold: fog and haze produce it with a completely dry road. Severity is warning
+  rather than advisory because the failure mode is a collision, not a delay.

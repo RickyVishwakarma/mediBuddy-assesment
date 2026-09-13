@@ -18,8 +18,9 @@ match:
     - {field: temperature_c, op: gte, value: 35}
 
 advice: |
-  The risk here is the ground surface, not the air temperature. Asphalt in direct sun runs
-  far hotter than the air above it and can burn paw pads within a minute.
+  The risk here is the ground surface, not the air temperature. Asphalt runs far hotter
+  than the air above it -- dramatically so under direct sun, but enough to burn paw pads
+  within a minute on any day this warm.
 
   Use the back-of-hand test: if you can't hold the back of your hand on the pavement for
   seven seconds, it's too hot to walk your dog on. Move the walk to early morning or
