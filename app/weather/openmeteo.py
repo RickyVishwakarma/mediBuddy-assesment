@@ -22,6 +22,11 @@ log = logging.getLogger(__name__)
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
+# httpx identifies itself as "python-httpx/0.x" by default, which is indistinguishable
+# from any unattended scraper. Public APIs routinely treat an anonymous client from a
+# shared cloud IP more harshly than a named one, and saying who we are costs nothing.
+HEADERS = {"User-Agent": "weather-advisory-bot/1.0 (take-home project; contact via repo)"}
+
 # Open-Meteo returns metadata with no values unless these are named explicitly.
 CURRENT_FIELDS = [
     "temperature_2m",
@@ -103,6 +108,7 @@ def geocode(city: str) -> ResolvedLocation:
             GEOCODE_URL,
             params={"name": city, "count": 5, "language": "en", "format": "json"},
             timeout=HTTP_TIMEOUT_SECONDS,
+            headers=HEADERS,
         )
         resp.raise_for_status()
         payload = resp.json()
@@ -160,7 +166,9 @@ def fetch_forecast(location: ResolvedLocation) -> dict:
     # is logged. Without this, a rate-limited deployment and a slow network are the same
     # unhelpful "could not be reached" in the logs as well as on screen.
     try:
-        resp = httpx.get(FORECAST_URL, params=params, timeout=HTTP_TIMEOUT_SECONDS)
+        resp = httpx.get(
+            FORECAST_URL, params=params, timeout=HTTP_TIMEOUT_SECONDS, headers=HEADERS
+        )
         resp.raise_for_status()
         payload = resp.json()
     except httpx.TimeoutException as exc:
