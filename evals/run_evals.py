@@ -611,6 +611,21 @@ def check_docs_match_code() -> list[str]:
             if not link.startswith("http") and not (root / link.rstrip("/")).exists():
                 problems.append(f"{doc_name}: broken link -> {link}")
 
+    # EVAL_RESULTS.md is generated. A hand-edit once left it with two contradictory notes
+    # sections, one claiming nine defects and one eleven, and nothing noticed.
+    results = root / "EVAL_RESULTS.md"
+    if results.exists():
+        body = results.read_text(encoding="utf-8")
+        for heading, label in (
+            ("## How to read these results", "notes section"),
+            ("defects found, and what caught them", "defect table"),
+        ):
+            if body.count(heading) > 1:
+                problems.append(
+                    f"EVAL_RESULTS.md contains {body.count(heading)} copies of the "
+                    f"{label} -- it is generated, so re-run the suite rather than editing it"
+                )
+
     # The policy-writing reference must stay complete. A reviewer adds a policy live
     # using it, so an operator or field that exists in code but not in the README is a
     # trap, and one documented but removed from code is worse.
@@ -918,6 +933,13 @@ def run_case(case: dict) -> dict:
 
 
 def write_report(records: list[dict]) -> None:
+    """Write EVAL_RESULTS.md from scratch.
+
+    This file is generated, never hand-edited. Editing it by hand once produced a document
+    carrying two contradictory notes sections -- one claiming nine defects and one eleven
+    -- because the patch keyed on a heading that had since been renamed and so appended
+    instead of replacing. Re-run this to update it.
+    """
     passed = sum(r["status"] == "PASS" for r in records)
     failed = sum(r["status"] == "FAIL" for r in records)
     skipped = sum(r["status"] == "SKIP" for r in records)
