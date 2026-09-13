@@ -439,21 +439,27 @@ wrong *number* is what a user acts on.
 
 ### What the suite missed
 
-Nine defects surfaced while building this. **The suite found one.** The rest came from
-probing the guard with a fabricated reply, reading the fallback's real output, asking
-ordinary follow-ups in the chat UI, auditing the policies twice — for pairs that
-contradict, and for advice untrue on its own triggers — and simply running the app and
-asking the brief's own example question, which exposed the last two. All nine are in
+Eleven defects surfaced while building this. **The suite found two.** The rest came from
+probing the guard with a fabricated reply, reading the fallback's real output and reading
+traces, asking ordinary follow-ups in the chat UI, auditing the policies twice — for pairs
+that contradict, and for advice untrue on its own triggers — and simply running the app
+and asking the brief's own example question. All eleven are in
 [EVAL_RESULTS.md](EVAL_RESULTS.md).
 
-Two are worth naming. **One window's weather leaked into another**, giving a
+Three are worth naming. **One window's weather leaked into another**, giving a
 danger-severity lightning warning for a storm-free evening — the grounding guard could
 never have caught it, because every figure was real and the storm was real; it simply
-belonged to a different part of the day. And **"is it safe to cycle in Bhopal today?"
-answered "we have no guidance"** on a day with a 100% chance of rain, because a rule I had
-tightened left a hole nothing else covered. Every eval case pins one *expected* policy, so
-none of them could detect a case where *nothing* matched; `policy_coverage` now asserts
-the opposite.
+belonged to a different part of the day. **"Is it safe to cycle in Bhopal today?" answered
+"we have no guidance"** on a day with a 100% chance of rain, because a rule I had tightened
+left a hole nothing else covered — every eval case pins one *expected* policy, so none
+could detect a case where *nothing* matched, and `policy_coverage` now asserts the
+opposite. And **the guard prevented the bot from denying a policy the user invented**: it
+didn't recognise `SOP-99` as an id, so it threw away two correct rebuttals for containing
+an "ungrounded" 99, and the defence collapsed into silence.
+
+That last one is worth the detail, because the eval case *passed* throughout — it checked
+that the bot never confirms the fake policy, and silence satisfies that. Only reading the
+trace showed the intended behaviour was impossible.
 
 A suite tests the failures you already imagined. Every guard here was verified by
 reintroducing the defect and watching it fail; twice a verification silently did nothing

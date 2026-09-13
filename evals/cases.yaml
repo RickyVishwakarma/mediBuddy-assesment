@@ -289,6 +289,21 @@ cases:
     mode: unit
     check: docs_match_code
 
+  - id: fabricated_policy_denial
+    checking: >
+      The bot can deny a policy the user invented, rather than only staying silent about
+      it. The guard used to prevent this: its id pattern required letters, so "SOP-99" was
+      not seen as an id and its digits were scanned as a weather figure. Two drafts that
+      correctly refuted the fabricated policy were rejected for "numbers not in the
+      forecast: 99", and the reply fell back to policy text that never addressed the
+      claim.
+    pass_means: >
+      A draft naming an id the user raised, in order to deny it, is accepted. A draft
+      introducing an id the user never mentioned is rejected. A draft that denies the
+      fabricated id but cites no real policy is still rejected.
+    mode: unit
+    check: fabricated_policy_denial
+
   - id: policy_hot_load
     checking: >
       A policy added to a running process takes effect without a restart. This is the

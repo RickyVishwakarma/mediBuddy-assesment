@@ -26,7 +26,10 @@ from app.weather.snapshot import WeatherSnapshot
 
 # Numbers as a model would write them: 34, 34.5, 1,200, 70%.
 NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
-SOP_ID_RE = re.compile(r"\bSOP[-_ ]?[A-Za-z]{2,4}[-_ ]?\d{1,4}\b", re.IGNORECASE)
+# Matches real ids (SOP-EX-003) and malformed ones (SOP-99, SOP99). Catching the
+# malformed shapes matters: a user inventing "SOP-99" is exactly the case the guard
+# exists for, and an id it cannot even see is an id it cannot police.
+SOP_ID_RE = re.compile(r"\bSOP[-_ ]?(?:[A-Za-z]{1,5}[-_ ]?)?\d{1,4}\b", re.IGNORECASE)
 
 # Small unit-less counts that appear in ordinary prose -- "both hands", "two hours",
 # "a couple of layers". Deliberately capped at ten: anything larger is far more likely
@@ -125,8 +128,16 @@ def check(
     snapshot: WeatherSnapshot,
     selected: SOP,
     secondary: list[SOP] | None = None,
+    question: str = "",
 ) -> GroundingReport:
-    """Verify one composed reply. Returns a report; never modifies the draft."""
+    """Verify one composed reply. Returns a report; never modifies the draft.
+
+    `question` is the user's own message. Policy ids THEY raised may appear in the reply,
+    so the bot can say "we have no SOP-99"; ids it introduces on its own may not. Without
+    that distinction the guard blocks the very correction it exists to enable -- it
+    rejected two drafts for the crime of naming the fabricated policy they were refuting,
+    and the bot's defence collapsed into silence.
+    """
     secondary = secondary or []
     cited_sops = [selected, *secondary]
     allowed = build_allowset(snapshot, cited_sops)
@@ -163,7 +174,10 @@ def check(
     # covers only part of today", which contains no figure at all. See guards/claims.py.
     claims = check_claims(draft, snapshot)
 
+    # Ids the user raised themselves are allowed to appear -- the reply needs to name a
+    # fabricated policy in order to deny it. Ids the model introduces are not.
     allowed_ids = {_normalise_id(s.id) for s in cited_sops}
+    allowed_ids |= {_normalise_id(m) for m in SOP_ID_RE.findall(question or "")}
     found_ids = {_normalise_id(m) for m in SOP_ID_RE.findall(draft)}
 
     return GroundingReport(

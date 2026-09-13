@@ -46,10 +46,18 @@ NO_LOCATION_TEXT = (
 # typed. Everything else is fixed wording: an exception string can carry quota blobs,
 # URLs and internal detail, and none of that belongs in front of a user.
 FAILURE_TEXTS = {
+    # The place genuinely isn't in the gazetteer -- a spelling suggestion is useful here.
     "geocode": (
         "I couldn't find a place matching \"{detail}\", so I have no forecast to check "
         "and won't guess at one. If the name has a common spelling variant, or there's a "
         "larger town nearby, try that instead."
+    ),
+    # The lookup itself failed. Telling the user their spelling is wrong would send them
+    # off trying variants of a name that was never the problem.
+    "geocode_unavailable": (
+        "I couldn't look up \"{detail}\" just now -- the location service didn't respond. "
+        "That's a problem on our side rather than anything wrong with the name, so it's "
+        "worth simply trying again in a moment."
     ),
     "weather": (
         "I couldn't retrieve the forecast just now, so I have no live data to advise "
@@ -274,7 +282,11 @@ def verify_grounding(state: AdvisoryState) -> dict:
 
     lead = state["selected"]
     secondary = state.get("secondary") or []
-    report = grounding.check(draft, state["snapshot"], lead.sop, [m.sop for m in secondary])
+    messages = state.get("messages", [])
+    question = messages[-1].content if messages else ""
+    report = grounding.check(
+        draft, state["snapshot"], lead.sop, [m.sop for m in secondary], question=question
+    )
 
     result = {
         "grounding": {

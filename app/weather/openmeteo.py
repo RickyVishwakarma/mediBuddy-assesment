@@ -103,12 +103,16 @@ def geocode(city: str) -> ResolvedLocation:
         )
         resp.raise_for_status()
         payload = resp.json()
+    # The lookup being unreachable is a different thing from the place not existing, and
+    # telling a user their spelling is wrong when the service merely timed out sends them
+    # off trying variants of a name that was never the problem. Both still take the same
+    # honest-failure path; only the wording differs.
     except httpx.TimeoutException as exc:
-        raise WeatherFetchError("geocode", f"geocoding timed out for {city!r}") from exc
+        raise WeatherFetchError("geocode_unavailable", f"timed out for {city!r}") from exc
     except httpx.HTTPError as exc:
-        raise WeatherFetchError("geocode", f"geocoding request failed for {city!r}") from exc
+        raise WeatherFetchError("geocode_unavailable", f"request failed for {city!r}") from exc
     except ValueError as exc:
-        raise WeatherFetchError("geocode", "geocoding returned a non-JSON body") from exc
+        raise WeatherFetchError("geocode_unavailable", "non-JSON body") from exc
 
     results = payload.get("results") or []
     if not results:
@@ -126,7 +130,9 @@ def geocode(city: str) -> ResolvedLocation:
             timezone=top.get("timezone", "auto"),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise WeatherFetchError("geocode", "geocoding result was missing coordinates") from exc
+        raise WeatherFetchError(
+            "geocode_unavailable", "result was missing coordinates"
+        ) from exc
 
 
 def fetch_forecast(location: ResolvedLocation) -> dict:
