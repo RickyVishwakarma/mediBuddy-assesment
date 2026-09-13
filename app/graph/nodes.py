@@ -28,13 +28,30 @@ from app.weather.snapshot import build_snapshot as make_snapshot
 
 log = logging.getLogger(__name__)
 
-# Fixed wording for the two answers that must never be model-generated.
-NO_GUIDANCE_TEXT = (
+# Fixed wording for the answers that must never be model-generated.
+#
+# Two distinct situations used to share OUT_OF_SCOPE_TEXT, and the shared wording was
+# wrong for one of them. Asked "is today good for a picnic in Lisbon?", the bot resolved
+# the city, fetched the forecast, matched nothing, and then replied that it covers
+# "cycling, running, commuting..." and the user should ask about one of those -- while
+# SOP-LP-001 lists `picnic` in its own applies_to. Disclaiming coverage we have reads as
+# a scope problem when it is a policy-set problem, and it sends the user away instead of
+# telling them what actually happened.
+OUT_OF_SCOPE_TEXT = (
     "We don't have guidance covering that. Our advice only comes from written policies "
     "we maintain, and none of them apply to this question, so rather than guess I'd "
     "rather tell you plainly that we can't help here. We cover outdoor activity safety "
     "-- cycling, running, commuting, taking children or pets out, and similar plans -- "
     "for a specific place and time, so ask about one of those and I'll check it."
+)
+
+# In scope, location resolved, forecast in hand -- and no policy matched it. The honest
+# answer names the gap rather than implying the question was the problem.
+NO_POLICY_TEXT = (
+    "I checked the forecast for {place}, but none of our written policies apply to "
+    "these conditions, so I don't have guidance to give you. That's a gap in our policy "
+    "set rather than a problem with the question. I won't fill it with a guess -- "
+    "anything I said here would be my own opinion rather than our guidance."
 )
 
 NO_LOCATION_TEXT = (
@@ -312,10 +329,23 @@ def deterministic_render(state: AdvisoryState) -> dict:
 
 
 def no_match_response(state: AdvisoryState) -> dict:
-    """Terminal: a fixed template. Structurally incapable of inventing advice."""
+    """Terminal: a fixed template. Structurally incapable of inventing advice.
+
+    Three arrivals, three different truths, so three templates. We never got a place; the
+    question was outside what we cover at all; or we did the whole lookup and our own
+    policy set came up empty. Only the last one is our shortcoming, and saying so is the
+    difference between an honest gap and a brush-off.
+    """
     intent_data = state.get("intent") or {}
     needs_location = intent_data.get("in_scope") and not intent_data.get("location")
-    body = NO_LOCATION_TEXT if needs_location else NO_GUIDANCE_TEXT
+
+    if needs_location:
+        body = NO_LOCATION_TEXT
+    elif state.get("snapshot"):
+        # We reached match_sops with a real forecast and nothing fired.
+        body = NO_POLICY_TEXT.format(place=_location_obj(state).label)
+    else:
+        body = OUT_OF_SCOPE_TEXT
     return {
         "final": body,
         "citations": [],

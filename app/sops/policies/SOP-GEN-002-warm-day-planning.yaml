@@ -1,0 +1,48 @@
+id: SOP-GEN-002
+title: Warm enough to plan around, not warm enough to call off
+category: general_conditions
+severity: advisory
+override: false
+
+applies_to:
+  activities: ["*"]
+  intent_hint: "any outdoor plan on a warm day that breaches no hazard threshold"
+
+# The all-clear (SOP-GEN-001) stops at 32 C apparent. Heat stress (SOP-EX-002) starts at
+# 38, or at 33 in humid air. Everything between those was uncovered, and the gap was not
+# theoretical: a picnic question in Lisbon at 34.1 C apparent and 35% humidity matched no
+# policy at all, so the bot said it had no guidance -- on a day it had plenty to say about.
+#
+# The `not` branch stands the rule down when SOP-EX-002's humid-heat case is already
+# firing. Both matching is harmless (severity ranking puts heat stress first and this
+# would trail it as a secondary note) but it reads as the same advice twice, and a policy
+# set that repeats itself teaches the reader to skim.
+match:
+  all:
+    - {field: apparent_temperature_c, op: gte, value: 32}
+    - {field: apparent_temperature_c, op: lt, value: 38}
+    - not:
+        all:
+          - {field: apparent_temperature_c, op: gte, value: 33}
+          - {field: humidity_pct, op: gte, value: 75}
+
+advice: |
+  It's warm enough to be worth planning around, but nothing here reaches the level at
+  which we'd tell you to hold off.
+
+  Carry more water than you think you need, take shade where there's a choice, and push
+  anything sustained towards the cooler ends of the day -- before 10:00 or after 17:00.
+  If the plan means sitting out in the open for a long stretch rather than moving
+  through it, sun cover matters more than the temperature reading does.
+
+compose_notes: >
+  This is a planning note, not a warning. Do not imply the day is unsafe and do not
+  manufacture concern. Quote the apparent temperature so the user can weigh it
+  themselves, and say plainly that it sits below our heat-stress threshold.
+
+rationale: >
+  A policy set with a benign case and a danger case, and nothing in between, forces every
+  ordinary warm day into one of two wrong answers: "proceed as planned" understates it and
+  "hold off" overstates it. Covering the middle band is what lets the severity scale mean
+  something, and it removes the largest remaining hole where a reasonable question fell
+  through every rule.

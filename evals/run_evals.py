@@ -73,7 +73,7 @@ SOP-EX-001. Neither contains a word from the rule's trigger vocabulary.
 **Adversarial choice.** Three are covered. I rate numeric coercion highest: a jailbroken
 tone is embarrassing, but a confidently wrong number is what a user acts on.
 
-## Eleven defects found, and what caught them
+## Twelve defects found, and what caught them
 
 The suite found **two**. Recorded because "it passed" only means something if it could
 have failed -- and defect 11 is the case in point: the suite caught a discrepancy between
@@ -93,6 +93,7 @@ than the product.
 | 9 | A policy added to a running server was silently ignored. The loader cached indefinitely, so a server held 13 policies while the directory had 14 -- breaking the one promise the whole design rests on. Asking uvicorn to watch the files looked like a fix and is not: its reloader is oriented at `.py`, and that flag had been written into the README without being verified. The loader now fingerprints the directory and re-reads on change. | running the app |
 | 10 | The guard stopped the bot denying a policy the user invented. Its id pattern required letters, so "SOP-99" was not recognised as an id and its digits were scanned as a weather figure: two drafts correctly refuting the fabricated policy were rejected for "numbers not in the forecast: 99", and the answer fell back to policy text that never addressed the claim. The defence worked by silence, which reads as evasion. The rule now is that the bot may name an id the USER raised and may never introduce one. | reading a trace |
 | 11 | This harness kept its own copy of that id pattern, and the copy drifted. Widening the guard left the harness demanding letters, so it scanned the 99 as a weather figure and failed a reply the application had correctly accepted. It now imports the pattern. The allow-set comparison stays independent -- that is the part worth checking twice -- but a second opinion on what an id looks like only creates drift. | **the eval suite** |
+| 12 | A picnic question matched no policy at all, and the check written to catch exactly that agreed there was no problem. Lisbon at 34.1 C apparent, 35% humidity, UV 6.7: the all-clear stops at 32 C, heat stress starts at 38 (or 33 in humid air), and SOP-EX-001 would have caught the UV but listed no leisure activity -- though sitting in the open for three hours is a larger dose than a half-hour ride. `policy_coverage` missed it because it only ever asked as a cyclist or a commuter, activities that appear in nearly every rule, so it shared the policy set's blind spot instead of testing it. It now asks as a picnicker too, and covers the temperature band. Separately, the reply was wrong to say "we cover cycling, running, commuting -- ask about one of those" when SOP-LP-001 lists `picnic`: an in-scope question that finds no policy now says so plainly rather than implying the question was the problem. | reading transcripts |
 
 **Non-numeric claims.** Defects 4, 6 and 7 all involved sentences rather than figures:
 every number in those replies was real, and the problem was which window, which rule, or
@@ -774,7 +775,7 @@ def check_policy_coverage() -> list[str]:
     from app.sops.engine import match_policies
     from app.sops.loader import load_policies
     from app.weather.openmeteo import ResolvedLocation
-    from app.weather.snapshot import WeatherSnapshot
+    from app.weather.snapshot import WeatherSnapshot, _comfort_index
 
     pol = load_policies()
     loc = ResolvedLocation("T", "", None, 0.0, 0.0, "UTC")
@@ -792,6 +793,12 @@ def check_policy_coverage() -> list[str]:
     def snap(**over):
         f = dict(base)
         f.update(over)
+        # comfort_index is derived, so deriving it here too keeps these fixtures honest.
+        # Hand-setting it let a case claim 6 mm of rain falling AND a comfort index of 80,
+        # which no real snapshot can produce -- and the impossible pairing then reported a
+        # coverage hole that does not exist, because the leisure rule's deterministic
+        # floor would have caught that day.
+        f["comfort_index"] = _comfort_index(f)
         return WeatherSnapshot(loc, f["window"], "2026-09-13T12:00", f)
 
     # Everyday conditions a commuter or cyclist would plausibly ask about.
@@ -805,6 +812,18 @@ def check_policy_coverage() -> list[str]:
                              visibility_km=4.0, rain_24h_mm=18.0, clear_sky=False)),
         ("hot and humid", dict(temperature_c=36.0, apparent_temperature_c=41.0,
                                humidity_pct=70.0, uv_index=9.0, uv_max_24h=9.0)),
+        # The band between the all-clear's 32 C ceiling and heat stress's 38 C floor.
+        # Nothing lived here, and with dry air nothing else reached down either: Lisbon
+        # at 34.1 C and 35% humidity matched no policy at all. Now SOP-GEN-002.
+        ("warm and dry", dict(temperature_c=32.9, apparent_temperature_c=34.1,
+                              humidity_pct=35.0, uv_index=6.7, uv_max_24h=6.7,
+                              comfort_index=62)),
+        # Warm with the sun already down -- the UV rule cannot rescue this one, so it
+        # tests the temperature band on its own rather than incidentally through UV.
+        ("warm evening, no sun", dict(temperature_c=32.0, apparent_temperature_c=33.4,
+                                      humidity_pct=40.0, uv_index=0.4, uv_max_24h=7.1,
+                                      window_start_hour=19, window_end_hour=23,
+                                      comfort_index=58)),
         ("cold and blowy", dict(temperature_c=3.0, apparent_temperature_c=-1.0,
                                 wind_speed_kmh=34.0, wind_gusts_kmh=50.0,
                                 gust_differential_kmh=16.0, temp_min_24h_c=-1.0)),
@@ -816,7 +835,11 @@ def check_policy_coverage() -> list[str]:
     problems: list[str] = []
     for label, over in days:
         s = snap(**over)
-        for activity in ("cycling", "commute"):
+        # Leisure activities were missing from this list, which is why the hole survived:
+        # the check only ever asked as a cyclist or a commuter, and those two are in every
+        # hazard rule's activity list. A picnic is in far fewer of them, so it is the
+        # activity that actually exercises the coverage question.
+        for activity in ("cycling", "commute", "picnic", "general_outdoor"):
             if not match_policies(pol, s, activity):
                 problems.append(
                     f"no policy matched '{activity}' on {label} -- the bot would answer "

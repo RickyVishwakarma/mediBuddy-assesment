@@ -17,7 +17,7 @@ the model's judgement**.
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-**State:** 14 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
+**State:** 15 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
 and the notes on what the suite missed — are generated into
 **[EVAL_RESULTS.md](EVAL_RESULTS.md)** by `python evals/run_evals.py`; that file is the
 source of truth rather than a number copied into this one.
@@ -103,9 +103,10 @@ adding a rule the same thing as adding a file.
 | `SOP-TR-004` | travel_commute | warning | Visibility ≤ 2 km — short sight lines, whatever the cause |
 | `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or ≥ 70% chance of rain |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
+| `SOP-GEN-002` | general_conditions | advisory | Apparent temp 32–38 °C in dry air — warm, below heat stress |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
 
-**Every one of the 13 carries its own `rationale` field** explaining why that threshold,
+**Every one of the 15 carries its own `rationale` field** explaining why that threshold,
 on that variable, at that severity — so the reasoning sits next to the rule rather than in
 a document that can drift from it. The four highlighted below are the ones whose reasoning
 generalises; the rest explain themselves in their files.
@@ -439,12 +440,21 @@ wrong *number* is what a user acts on.
 
 ### What the suite missed
 
-Eleven defects surfaced while building this. **The suite found two.** The rest came from
+Twelve defects surfaced while building this. **The suite found two.** The rest came from
 probing the guard with a fabricated reply, reading the fallback's real output and reading
 traces, asking ordinary follow-ups in the chat UI, auditing the policies twice — for pairs
 that contradict, and for advice untrue on its own triggers — and simply running the app
-and asking the brief's own example question. All eleven are in
+and asking the brief's own example question. All twelve are in
 [EVAL_RESULTS.md](EVAL_RESULTS.md).
+
+The twelfth is the sharpest, because the check written to prevent it had the same blind
+spot the policy set did. `policy_coverage` asserts that ordinary weather always matches
+something — but it only ever asked as a cyclist or a commuter, and those two activities
+appear in nearly every rule. Asked about a picnic in Lisbon at 34 °C, the bot matched
+nothing and said so. Two holes, one cause: the UV rule omitted leisure activities though
+sitting still in the sun is the larger dose, and the band between the all-clear's 32 °C
+ceiling and heat stress's 38 °C floor belonged to no rule at all. A test that shares an
+assumption with the code it checks will agree with it.
 
 Three are worth naming. **One window's weather leaked into another**, giving a
 danger-severity lightning warning for a storm-free evening — the grounding guard could
