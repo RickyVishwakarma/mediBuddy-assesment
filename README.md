@@ -46,7 +46,37 @@ JS, no build step; FastAPI serves it, so there's no second process and no CORS. 
 session id in `sessionStorage` which becomes the graph's `thread_id`, so a refresh starts
 a new session — matching "memory resets between sessions".
 
-**Evals** — `python evals/run_evals.py`. Three cases are offline and need no API key.
+**Evals** — `python evals/run_evals.py`. Five cases are offline and need no API key.
+
+### If a reply comes back plain
+
+Some replies read as flowing prose; others look like this:
+
+```
+For Bhopal, Madhya Pradesh, India, today — thunderstorm forecast in the asked-about window.
+Don't be outdoors or in an exposed vehicle during the storm. …
+Based on this forecast:  Temperature: 26.4 °C  …
+Policy: SOP-TR-002, SOP-TR-001
+```
+
+That is the **deterministic fallback**, and it is the system working rather than failing.
+The composing model was unreachable — on the free tier, usually the per-minute quota — so
+the graph rendered the selected policy directly instead. The answer is still grounded in
+real figures, still cites the policy that produced it, and still cannot invent anything;
+it is simply not re-worded. The trace shown under each reply says so explicitly:
+
+```
+… → compose_answer(unavailable) → verify_grounding(no draft) → deterministic_render
+```
+
+It is worth seeing at least once, because it is the clearest demonstration of the central
+guarantee: **with the model entirely unavailable, the bot still answers correctly from
+policy.** Notably it also refuses a false premise in that state — the
+`adversarial_numeric_coercion` eval passed through this path and still reported the real
+temperature rather than the user's invented one.
+
+To see composed prose instead, don't run the eval suite at the same time — both share one
+quota, and a full run will exhaust the per-minute allowance.
 
 ---
 
