@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.graph.build import ask
 from app.sops.loader import load_policies
+from server import limits
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -44,9 +45,23 @@ def index() -> FileResponse:
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest, http: Request) -> ChatResponse:
+    # Public-demo throttling only; a no-op unless DEMO_MODE is set. Keyed on the session
+    # id with the client address as a fallback, so one browser tab cannot loop on it.
+    client = http.client.host if http.client else "unknown"
+    blocked = limits.check(f"{client}:{request.session_id[:40]}")
+    if blocked:
+        return ChatResponse(reply=blocked, failed=True, trace=["rate_limited"])
+
     result = ask(request.message, session_id=request.session_id)
     return ChatResponse(**result)
+
+
+@app.get("/demo-status")
+def demo_status() -> dict:
+    """What the demo has spent today. Useful when a reply says the budget is gone --
+    it distinguishes an exhausted allowance from an actual fault."""
+    return limits.status()
 
 
 @app.get("/policies")
