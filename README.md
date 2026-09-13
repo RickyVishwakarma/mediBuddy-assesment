@@ -270,6 +270,22 @@ Calls 1 and 2 are constrained classification into a fixed schema, so they run on
 model; only call 3 produces anything a user reads. The provider swap surface is the two
 functions in [`client.py`](app/llm/client.py) — `structured()` and `text()`.
 
+### Where the component boundaries are, and why
+
+Each seam was placed so that the thing on one side can be tested without the thing on the
+other. That test is what decided every boundary here.
+
+| Seam | What crosses it | What that buys |
+|---|---|---|
+| `weather/` → `sops/` | the **snapshot**, and nothing else | `weather/` knows no policy exists; `sops/` knows no API exists. The engine can be unit-tested against a hand-written dict, which is how the rules were verified before any LLM was wired up. |
+| `sops/` → `llm/` | a **judge callable**, injected | [`engine.py`](app/sops/engine.py) has no LLM import at all. Policy matching is therefore deterministic, offline, and network-free for 11 of 12 rules — and the fuzzy one fails closed when the judge is absent. |
+| everything → `graph/` | thin **node adapters** | Nodes marshal state; they hold no domain logic. That's why `nodes.py` is not the biggest file in the repo despite touching every component. |
+| model → user | the **grounding guard** | [`grounding.py`](app/guards/grounding.py) depends only on a snapshot and an SOP. It has no idea a graph or a model exists, so it can be tested by handing it a fabricated reply — which is exactly how the "30 km/h" hole was found. |
+
+The practical consequence: the weather layer, the rule engine and the guard were each
+built and verified **before** the graph existed. If the seams were in the wrong places
+that wouldn't have been possible.
+
 ### Conflict resolution — chosen deliberately
 
 When several policies apply, [`engine.py`](app/sops/engine.py) sorts by:
@@ -433,6 +449,25 @@ The brief offers prompt injection and invites an alternative. I run **three**, a
 The other two cover fabricated-policy confirmation and classic instruction override.
 
 ---
+
+## What this suite did and didn't catch
+
+Worth stating plainly, because it qualifies how much the green run above is worth.
+
+Four real defects surfaced while building this. **The eval suite found one of them.** The
+other three came from probing by hand: feeding the guard a deliberately fabricated reply,
+reading the deterministic fallback's actual output, and asking the bot a natural follow-up
+question in the chat UI. All four are documented in [EVAL_RESULTS.md](EVAL_RESULTS.md),
+and each now has a case guarding it.
+
+The most serious — one window's weather leaking into another, producing a danger-severity
+lightning warning for a storm-free evening — is the clearest illustration of the limit. No
+eval had asked a follow-up about a *different* window under live conditions, and the
+grounding guard could never have caught it: every figure in that reply was real, the storm
+was real, it simply belonged to a different part of the day.
+
+The lesson I'd carry forward is that a suite tests the failures you already imagined.
+Manual probing is how you find the ones you didn't, and the two are not substitutes.
 
 ## Known gaps
 
