@@ -15,3 +15,8 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.10"
+      # Longer than the local default: egress from a shared free-plan instance is slower
+      # than from a laptop, and a forecast we waited for beats an honest failure we
+      # didn't need to give.
+      - key: HTTP_TIMEOUT_SECONDS
+        value: "25"

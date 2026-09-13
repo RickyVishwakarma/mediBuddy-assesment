@@ -10,11 +10,14 @@ pay for breadth here to keep app/sops/policies/ purely declarative.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import httpx
 
 from app.config import HTTP_TIMEOUT_SECONDS
+
+log = logging.getLogger(__name__)
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -152,15 +155,28 @@ def fetch_forecast(location: ResolvedLocation) -> dict:
         "hourly": ",".join(HOURLY_FIELDS),
         "daily": ",".join(DAILY_FIELDS),
     }
+    # The user-facing message stays deliberately vague -- an upstream error string can
+    # carry URLs and internal detail. The operator needs the opposite, so the real status
+    # is logged. Without this, a rate-limited deployment and a slow network are the same
+    # unhelpful "could not be reached" in the logs as well as on screen.
     try:
         resp = httpx.get(FORECAST_URL, params=params, timeout=HTTP_TIMEOUT_SECONDS)
         resp.raise_for_status()
         payload = resp.json()
     except httpx.TimeoutException as exc:
+        log.warning("forecast timed out after %ss for %s", HTTP_TIMEOUT_SECONDS, location.name)
         raise WeatherFetchError("weather", "the weather service timed out") from exc
+    except httpx.HTTPStatusError as exc:
+        log.warning(
+            "forecast HTTP %s for %s -- body: %.200s",
+            exc.response.status_code, location.name, exc.response.text,
+        )
+        raise WeatherFetchError("weather", "the weather service could not be reached") from exc
     except httpx.HTTPError as exc:
+        log.warning("forecast transport error for %s: %s", location.name, exc)
         raise WeatherFetchError("weather", "the weather service could not be reached") from exc
     except ValueError as exc:
+        log.warning("forecast returned non-JSON for %s", location.name)
         raise WeatherFetchError("weather", "the weather service returned a non-JSON body") from exc
 
     # A 200 with no "current" block is the documented trap in the brief. Treat it as a
