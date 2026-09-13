@@ -1,0 +1,48 @@
+id: SOP-EX-005
+title: Cold exposure during outdoor activity
+category: outdoor_exercise
+severity: caution
+override: false
+
+applies_to:
+  activities: [cycling, motorcycle, running, walking, hiking, sports, commute, pet_walk, general_outdoor]
+  intent_hint: "user plans to be outdoors for a while in genuinely cold air"
+
+# The set had heat stress (SOP-EX-002) and nothing for cold beyond SOP-VG-002, which is
+# scoped to older adults. So cycling at -1 C in a 50 km/h gust matched no policy at all
+# and the bot answered "we have no guidance" -- found by the policy_coverage guard, not
+# by any case that was looking for it.
+#
+# Keyed on apparent temperature rather than air temperature for the same reason as the
+# heat rule: wind chill is what the body actually experiences, and on a bike you generate
+# your own. A still 2 C day and a 6 C day with a stiff wind are the same problem.
+match:
+  any:
+    - {field: apparent_temperature_c, op: lte, value: 2}
+    - all:
+        - {field: apparent_temperature_c, op: lte, value: 8}
+        - {field: wind_speed_kmh, op: gte, value: 25}
+
+advice: |
+  It is cold enough that the length of time you're out matters more than the temperature
+  at the moment you set off. Moving through cold air adds its own wind chill, so it will
+  feel colder than the forecast once you're up to speed.
+
+  Cover the extremities first -- hands, ears and feet lose heat fastest and stiff fingers
+  are what make braking and gear changes unreliable. Layer so you can shed one without
+  stopping, and keep a windproof outer layer on even when you warm up, because the chill
+  returns the moment you slow down.
+
+  Watch for the early signs that judgement is going before you notice the cold: clumsiness,
+  slurred speech, a sudden urge to stop and rest. Those mean get indoors, not push on.
+  If the route is exposed or remote, tell someone when you expect to be back.
+
+compose_notes: >
+  Give the "feels like" figure rather than the air temperature, and the wind speed where
+  it contributed -- the gap between the two is the point.
+
+rationale: >
+  Cold injury tracks apparent temperature, and self-generated wind chill means an active
+  person outdoors experiences worse than a still-air reading suggests. Severity is caution
+  rather than warning because the mitigation is clothing and duration, both of which are
+  within the user's control -- unlike lightning or ice.

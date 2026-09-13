@@ -22,18 +22,30 @@ applies_to:
 # The lesson generalises: a rule's advice text must be true for EVERY condition that can
 # trigger it. An `any:` branch that widens the trigger without fitting the advice is a
 # grounding bug the numeric guard cannot catch, because every figure involved is real.
+# Two ways a journey gets slower, and the advice below is true for both:
+#   - rain already falling hard enough to sit on the road, with sight lines shortened
+#   - rain not yet falling but near-certain, which is worth setting off early for
+#
+# The second branch exists because removing it left a hole: on a day with a 100% chance
+# of rain, 1.3 mm fallen so far and 3 km visibility, NO policy fired at all and the bot
+# answered "we have no guidance" to an ordinary commuting question. Keying purely on
+# intensity fixed one bug (advice asserting wet roads on a dry fog day) and opened
+# another. Probability is a poor trigger on its own; it is a perfectly good one for
+# "plan around this".
 match:
-  all:
-    - {field: precipitation_mm, op: gte, value: 4}
-    - {field: visibility_km, op: lte, value: 5}
+  any:
+    - all:
+        - {field: precipitation_mm, op: gte, value: 4}
+        - {field: visibility_km, op: lte, value: 5}
+    - {field: precipitation_probability_pct, op: gte, value: 70}
 
 advice: |
-  Expect the journey to be slower than usual rather than dangerous. There's enough water
-  coming down to sit on the road surface, and sight lines are shorter than normal.
+  Expect the journey to be slower than usual rather than dangerous. There's enough rain
+  about to affect the roads, whether or not it has started where you are.
 
-  Set off earlier than you would otherwise, and check for service alerts or traffic
-  disruption before you leave rather than discovering them en route. Standing water
-  gathers first at underpasses and junctions, so those are where delays build.
+  Set off earlier than you would otherwise, take rain protection, and check for service
+  alerts or traffic disruption before you leave rather than discovering them en route.
+  Water gathers first at underpasses and junctions, so those are where delays build.
 
   If you're walking or riding, assume drivers will see you later than usual: wear
   something visible, and give up right-of-way rather than insisting on it at crossings.

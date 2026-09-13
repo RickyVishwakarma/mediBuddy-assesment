@@ -5,7 +5,10 @@ severity: warning
 override: false
 
 applies_to:
-  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor]
+  # `commute` is included deliberately: getting to work in this means walking to a stop,
+  # standing on a platform, or riding in it. Leaving it out meant a question about
+  # commuting on a 41 C day matched no policy at all and got "we have no guidance".
+  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor, commute]
   intent_hint: "user plans sustained physical effort outdoors"
 
 # Apparent temperature, not raw temperature: humidity is what defeats sweat cooling,

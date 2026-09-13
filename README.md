@@ -17,7 +17,7 @@ the model's judgement**.
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-**State:** 13 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
+**State:** 14 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
 and the notes on what the suite missed — are generated into
 **[EVAL_RESULTS.md](EVAL_RESULTS.md)** by `python evals/run_evals.py`; that file is the
 source of truth rather than a number copied into this one.
@@ -48,9 +48,6 @@ a new session — matching "memory resets between sessions".
 
 **Evals** — `python evals/run_evals.py`. Five cases are offline and need no API key.
 
-**Docker**, if you'd rather not make a virtualenv — `docker build -t weather-advisory-bot .`
-then `docker run --rm -p 8000:8000 --env-file .env weather-advisory-bot`. The key is passed
-in at run time, never baked into the image.
 
 ### If a reply comes back plain
 
@@ -100,10 +97,11 @@ adding a rule the same thing as adding a file.
 | `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
 | `SOP-VG-001` | vulnerable_groups | warning | Child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
 | `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained activity |
+| `SOP-EX-005` | outdoor_exercise | caution | Apparent temp ≤ 2 °C, or ≤ 8 °C with wind ≥ 25 |
 | `SOP-VG-002` | vulnerable_groups | caution | Older adult, apparent temp ≤ 5, or ≤ 12 with wind ≥ 30 |
 | `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky — pavement burns |
 | `SOP-TR-004` | travel_commute | warning | Visibility ≤ 2 km — short sight lines, whatever the cause |
-| `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km |
+| `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or ≥ 70% chance of rain |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
 
@@ -157,8 +155,20 @@ catches a clearly miserable day.
 
 ### Adding a policy without touching code
 
-Drop a `.yaml` into `app/sops/policies/` and restart. That's it — rehearsed, and it
-changed **zero files outside that directory**.
+Drop a `.yaml` into `app/sops/policies/`. That's it — **no restart, no flag, no code
+touched.** The next question uses it.
+
+The loader caches against a fingerprint of the directory (name, mtime, size), so it
+notices a file being added, edited or removed and re-reads. That is one `stat()` per file
+against a request already spending hundreds of milliseconds on a weather call and an LLM
+call.
+
+It works this way because the obvious alternative didn't. Caching indefinitely and asking
+uvicorn to watch the files looks fine and fails quietly: uvicorn's reloader is oriented at
+`.py`, so a running server kept thirteen policies while the directory had fourteen, and
+answered "we have no guidance" to a question the fourteenth covered. A policy that appears
+to have been added and silently never fires is the worst failure this system has, so the
+check belongs in the loader where it cannot be forgotten.
 
 It works because the snapshot exposes a fixed vocabulary, documented in
 [`app/vocabulary.py`](app/vocabulary.py), which is the only file a policy author needs.

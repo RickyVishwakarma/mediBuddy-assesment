@@ -14,7 +14,29 @@ from pydantic import ValidationError
 from app.config import POLICY_DIR
 from app.sops.schema import SOP, SOPValidationError
 
-_CACHE: dict[str, list[SOP]] = {}
+# Cached against a fingerprint of the directory rather than indefinitely. Policy files
+# are the one thing here designed to be edited by someone who never touches the Python,
+# so a cache that outlives an edit is a trap: a new rule appears to have been added and
+# silently never fires until someone restarts the process.
+#
+# That happened. A running server held thirteen policies while the directory had
+# fourteen, and the answer to an ordinary question was "we have no guidance". Watching
+# the files from uvicorn was the obvious fix and does not work reliably -- its reloader
+# is oriented at .py -- so the check belongs here, where it cannot be forgotten.
+#
+# The fingerprint is name + mtime + size across the directory: one stat() per file, a
+# few microseconds against a request that will spend hundreds of milliseconds on a
+# weather call and an LLM call.
+_CACHE: dict[str, tuple[tuple, list[SOP]]] = {}
+
+
+def _fingerprint(path: Path) -> tuple:
+    return tuple(
+        sorted(
+            (f.name, f.stat().st_mtime_ns, f.stat().st_size)
+            for f in list(path.glob("*.yaml")) + list(path.glob("*.yml"))
+        )
+    )
 
 
 def load_policies(directory: Path | None = None, use_cache: bool = True) -> list[SOP]:
@@ -22,14 +44,19 @@ def load_policies(directory: Path | None = None, use_cache: bool = True) -> list
 
     Raises on the first bad file. A policy set that half-loads is worse than one that
     refuses to start, because the missing rule is invisible at runtime.
+
+    Re-reads automatically when a file is added, edited or removed, so a policy dropped
+    into the directory takes effect on the next question with no restart.
     """
     path = Path(directory or POLICY_DIR)
     key = str(path.resolve())
-    if use_cache and key in _CACHE:
-        return _CACHE[key]
 
     if not path.is_dir():
         raise SOPValidationError(f"policy directory not found: {path}")
+
+    stamp = _fingerprint(path)
+    if use_cache and key in _CACHE and _CACHE[key][0] == stamp:
+        return _CACHE[key][1]
 
     policies: list[SOP] = []
     seen_ids: dict[str, str] = {}
@@ -58,7 +85,7 @@ def load_policies(directory: Path | None = None, use_cache: bool = True) -> list
     if not policies:
         raise SOPValidationError(f"no policy files found in {path}")
 
-    _CACHE[key] = policies
+    _CACHE[key] = (stamp, policies)
     return policies
 
 

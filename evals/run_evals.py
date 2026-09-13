@@ -610,12 +610,148 @@ def check_docs_match_code() -> list[str]:
     return problems
 
 
+def check_policy_hot_load() -> list[str]:
+    """A policy added to a running process must take effect without a restart.
+
+    This is the promise the whole design rests on, and it broke twice without anyone
+    noticing: the loader cached indefinitely, so a running server held thirteen policies
+    while the directory had fourteen and answered "we have no guidance" to a question the
+    fourteenth covered. Watching the files from uvicorn was the obvious fix and does not
+    work -- its reloader is oriented at .py -- which is exactly the kind of thing that
+    looks fixed and isn't.
+
+    Asserts all three transitions: added, edited, removed.
+    """
+    import shutil
+    import tempfile
+    import time
+    from pathlib import Path
+
+    from app.sops.loader import load_policies
+
+    valid = """
+id: SOP-HOT-001
+title: Hot-load probe
+category: test
+severity: info
+applies_to: {activities: ["*"]}
+match: {field: humidity_pct, op: gte, value: 50}
+advice: added while the process was running
+"""
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d)
+        shutil.copy(
+            Path(__file__).resolve().parent.parent
+            / "app/sops/policies/SOP-GEN-001-benign-conditions.yaml",
+            path / "seed.yaml",
+        )
+        if len(load_policies(path, use_cache=True)) != 1:
+            problems.append("baseline load did not see the single seed policy")
+
+        # added
+        (path / "probe.yaml").write_text(valid, encoding="utf-8")
+        time.sleep(0.01)
+        ids = {p.id for p in load_policies(path, use_cache=True)}
+        if "SOP-HOT-001" not in ids:
+            problems.append(
+                "a policy added to a running process was not picked up -- it would appear "
+                "to have been added and silently never fire"
+            )
+
+        # edited
+        (path / "probe.yaml").write_text(
+            valid.replace("severity: info", "severity: danger"), encoding="utf-8"
+        )
+        time.sleep(0.01)
+        edited = {p.id: p.severity for p in load_policies(path, use_cache=True)}
+        if edited.get("SOP-HOT-001") != "danger":
+            problems.append("an edit to an existing policy was not picked up")
+
+        # removed
+        (path / "probe.yaml").unlink()
+        time.sleep(0.01)
+        if "SOP-HOT-001" in {p.id for p in load_policies(path, use_cache=True)}:
+            problems.append("a removed policy was still being served from cache")
+
+    return problems
+
+
+def check_policy_coverage() -> list[str]:
+    """Ordinary weather must not fall through every policy.
+
+    "We have no guidance" is a correct answer to a question outside our scope. It is a bad
+    answer to "is it safe to cycle today?" on a wet Tuesday, and that happened: a day with
+    a 100% chance of rain, 1.3 mm fallen and 3 km visibility matched NOTHING. The all-clear
+    stayed silent because conditions were not benign, and no hazard rule reached that far
+    down -- a hole opened by tightening SOP-TR-001 onto rainfall intensity.
+
+    No eval case would have caught it, because every case pins a specific expected policy.
+    This one asserts the opposite: that plausible everyday conditions always land
+    somewhere, hazard or all-clear.
+    """
+    from app.sops.engine import match_policies
+    from app.sops.loader import load_policies
+    from app.weather.openmeteo import ResolvedLocation
+    from app.weather.snapshot import WeatherSnapshot
+
+    pol = load_policies()
+    loc = ResolvedLocation("T", "", None, 0.0, 0.0, "UTC")
+    base = dict(
+        temperature_c=20.0, apparent_temperature_c=20.0, humidity_pct=55.0,
+        wind_speed_kmh=9.0, wind_gusts_kmh=14.0, gust_differential_kmh=5.0, uv_index=3.0,
+        precipitation_mm=0.0, precipitation_probability_pct=5.0, visibility_km=20.0,
+        window="today", window_start_hour=8, window_end_hour=23, window_hours=8,
+        rain_24h_mm=0.0, gust_peak_24h_kmh=16.0, temp_min_24h_c=12.0, uv_max_24h=4.0,
+        rain_class="none", rain_class_rank=0, heavy_rain_regime=False,
+        thunderstorm_in_window=False, thunderstorm_hours_in_window=0,
+        thunderstorm_covers_whole_window=False, clear_sky=True, comfort_index=80,
+    )
+
+    def snap(**over):
+        f = dict(base)
+        f.update(over)
+        return WeatherSnapshot(loc, f["window"], "2026-09-13T12:00", f)
+
+    # Everyday conditions a commuter or cyclist would plausibly ask about.
+    days = [
+        ("a pleasant day", {}),
+        ("rain near-certain but barely started", dict(
+            precipitation_probability_pct=100.0, precipitation_mm=1.3, visibility_km=3.0,
+            rain_24h_mm=10.2, rain_class="light", rain_class_rank=2, clear_sky=False,
+            humidity_pct=92.0, apparent_temperature_c=30.3, comfort_index=22)),
+        ("steady rain", dict(precipitation_mm=6.0, precipitation_probability_pct=90.0,
+                             visibility_km=4.0, rain_24h_mm=18.0, clear_sky=False)),
+        ("hot and humid", dict(temperature_c=36.0, apparent_temperature_c=41.0,
+                               humidity_pct=70.0, uv_index=9.0, uv_max_24h=9.0)),
+        ("cold and blowy", dict(temperature_c=3.0, apparent_temperature_c=-1.0,
+                                wind_speed_kmh=34.0, wind_gusts_kmh=50.0,
+                                gust_differential_kmh=16.0, temp_min_24h_c=-1.0)),
+        ("thick fog", dict(visibility_km=0.6, clear_sky=False, humidity_pct=98.0)),
+        ("gusty and bright", dict(wind_speed_kmh=26.0, wind_gusts_kmh=52.0,
+                                  gust_differential_kmh=26.0, gust_peak_24h_kmh=52.0)),
+    ]
+
+    problems: list[str] = []
+    for label, over in days:
+        s = snap(**over)
+        for activity in ("cycling", "commute"):
+            if not match_policies(pol, s, activity):
+                problems.append(
+                    f"no policy matched '{activity}' on {label} -- the bot would answer "
+                    f"'we have no guidance' to an ordinary question"
+                )
+    return problems
+
+
 UNIT_CHECKS = {
     "window_isolation": check_window_isolation,
     "policy_validation": check_policy_validation,
     "no_contradiction": check_no_contradiction,
     "claim_grounding": check_claim_grounding,
     "docs_match_code": check_docs_match_code,
+    "policy_coverage": check_policy_coverage,
+    "policy_hot_load": check_policy_hot_load,
 }
 
 
