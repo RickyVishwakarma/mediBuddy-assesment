@@ -108,12 +108,12 @@ adding a rule the same thing as adding a file.
 | `SOP-TR-002` | travel_commute | danger | Thunderstorm in the asked-about window |
 | `SOP-TR-003` | travel_commute | danger | Rain onto ground at or below freezing — ice |
 | `SOP-EX-002` | outdoor_exercise | warning | Apparent temp ≥ 38 °C, or ≥ 33 °C with humidity ≥ 75% |
-| `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
+| `SOP-EX-003` | outdoor_exercise | warning | Two wheels: gusts ≥ 20 km/h above the prevailing wind **and** ≥ 45, or ≥ 65 outright |
 | `SOP-VG-001` | vulnerable_groups | warning | Child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
 | `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained activity |
 | `SOP-EX-005` | outdoor_exercise | caution | Apparent temp ≤ 5 °C, or ≤ 8 °C with wind ≥ 25 |
 | `SOP-VG-002` | vulnerable_groups | caution | Older adult, apparent temp ≤ 5, or ≤ 12 with wind ≥ 30 |
-| `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky — pavement burns |
+| `SOP-VG-003` | vulnerable_groups | caution | Dog walk: 32 °C under clear sky, or 35 °C whatever the sky — pavement burns |
 | `SOP-TR-004` | travel_commute | warning | Visibility ≤ 2 km — short sight lines, whatever the cause |
 | `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or ≥ 70% chance of rain |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
