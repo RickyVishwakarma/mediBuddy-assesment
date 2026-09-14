@@ -2,39 +2,236 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>Weather-Advisory Support Bot</title>
 <style>
+  /* Severity is the most important thing on screen: it is the one part of the answer a
+     user acts on before reading a word. So it is the only place colour is spent. */
   :root {
-    --bg: #f6f7f9; --panel: #fff; --ink: #1c1f23; --muted: #6b7280;
-    --line: #e3e6ea; --user: #1f6feb; --accent: #0b7285;
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #16191d;
+    --muted: #626b76;
+    --faint: #8b95a1;
+    --line: #e2e6eb;
+    --user: #1f6feb;
+    --user-ink: #ffffff;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
+
+    --sev-info-bg: #eef2f6;    --sev-info-fg: #475569;   --sev-info-br: #d6dee7;
+    --sev-advisory-bg: #e8f1fe; --sev-advisory-fg: #1d4ed8; --sev-advisory-br: #c3dafc;
+    --sev-caution-bg: #fef6e7;  --sev-caution-fg: #a16207; --sev-caution-br: #f6e0b5;
+    --sev-warning-bg: #fff0e6;  --sev-warning-fg: #c2410c; --sev-warning-br: #fbd3ba;
+    --sev-danger-bg: #fdecec;   --sev-danger-fg: #b91c1c;  --sev-danger-br: #f7c9c9;
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216;
+      --panel: #171b21;
+      --ink: #e7eaee;
+      --muted: #9aa4b0;
+      --faint: #6b7684;
+      --line: #262c35;
+      --user: #2f7ff0;
+      --shadow: none;
+
+      --sev-info-bg: #1b2028;    --sev-info-fg: #9fb0c2;   --sev-info-br: #2b333e;
+      --sev-advisory-bg: #14243d; --sev-advisory-fg: #7fb0ff; --sev-advisory-br: #23385a;
+      --sev-caution-bg: #2c2412;  --sev-caution-fg: #e3b34f; --sev-caution-br: #46391c;
+      --sev-warning-bg: #33200f;  --sev-warning-fg: #f59156; --sev-warning-br: #4d2f16;
+      --sev-danger-bg: #331616;   --sev-danger-fg: #f47272;  --sev-danger-br: #4d2020;
+    }
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--bg); color: var(--ink); }
-  .wrap { max-width: 780px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column; }
-  header { padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  header h1 { margin: 0; font-size: 16px; }
-  header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
-  #thread { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-  .msg { max-width: 88%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; }
-  .user { align-self: flex-end; background: var(--user); color: #fff; border-bottom-right-radius: 3px; }
-  .bot  { align-self: flex-start; background: var(--panel); border: 1px solid var(--line);
-          border-bottom-left-radius: 3px; }
-  .meta { align-self: flex-start; max-width: 88%; font-size: 12px; color: var(--muted);
-          margin-top: -8px; padding-left: 4px; }
-  .cite { display: inline-block; background: #e7f5f8; color: var(--accent); border: 1px solid #c5e4ea;
-          border-radius: 4px; padding: 1px 6px; margin-right: 6px; font-weight: 600; }
-  .flag { color: #92400e; font-weight: 600; }
-  .trace { color: #9aa1a9; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
-           margin-top: 3px; }
-  form { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line);
-         background: var(--panel); }
-  input { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
-          font: inherit; }
-  button { padding: 10px 18px; border: 0; border-radius: 8px; background: var(--user); color: #fff;
-           font: inherit; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* dvh rather than vh: on mobile the address bar makes 100vh taller than the screen,
+     which pushes the composer under the fold exactly when you want to type. */
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  header {
+    padding: 14px 20px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+  header p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+
+  #thread {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .msg {
+    max-width: 86%;
+    padding: 11px 15px;
+    border-radius: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-top: 12px;
+  }
+  .user {
+    align-self: flex-end;
+    background: var(--user);
+    color: var(--user-ink);
+    border-bottom-right-radius: 4px;
+  }
+  .bot {
+    align-self: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--shadow);
+  }
+
+  .meta {
+    align-self: flex-start;
+    max-width: 86%;
+    margin: 6px 0 0 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .cites { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* The citation is the claim "this advice is not mine, it is policy N" -- so it is
+     built to look like a label on a document rather than decoration. */
+  .cite {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 10px 3px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .cite .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .cite .sev { font-weight: 500; opacity: .8; text-transform: capitalize; }
+  .sev-info     { background: var(--sev-info-bg);     color: var(--sev-info-fg);     border-color: var(--sev-info-br); }
+  .sev-advisory { background: var(--sev-advisory-bg); color: var(--sev-advisory-fg); border-color: var(--sev-advisory-br); }
+  .sev-caution  { background: var(--sev-caution-bg);  color: var(--sev-caution-fg);  border-color: var(--sev-caution-br); }
+  .sev-warning  { background: var(--sev-warning-bg);  color: var(--sev-warning-fg);  border-color: var(--sev-warning-br); }
+  .sev-danger   { background: var(--sev-danger-bg);   color: var(--sev-danger-fg);   border-color: var(--sev-danger-br); }
+
+  .flag {
+    display: inline-block;
+    font-weight: 600;
+    font-size: 11.5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--sev-caution-bg);
+    color: var(--sev-caution-fg);
+    border: 1px solid var(--sev-caution-br);
+  }
+
+  /* The execution path. Kept on screen rather than hidden in a console: "why did it say
+     that" is the question this project exists to answer, and the route the graph took
+     is half the answer. Collapsed by default on narrow screens so it never crowds out
+     the advice itself. */
+  details.trace { margin-top: 6px; }
+  details.trace summary {
+    cursor: pointer; color: var(--faint); font-size: 11.5px;
+    list-style: none; user-select: none; padding: 2px 0;
+  }
+  details.trace summary::-webkit-details-marker { display: none; }
+  details.trace summary::before { content: "▸ "; }
+  details.trace[open] summary::before { content: "▾ "; }
+  details.trace summary:hover { color: var(--muted); }
+  .trace-body {
+    color: var(--faint);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }
+
+  /* Starter prompts. A reviewer opening this cold should not have to guess what it
+     answers -- and these double as the quickest demonstration of the range. */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip {
+    font: inherit; font-size: 13px;
+    background: var(--panel); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 7px 13px; cursor: pointer; text-align: left;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--faint); }
+
+  .dots { display: inline-flex; gap: 4px; align-items: center; height: 20px; }
+  .dots i {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--faint);
+    animation: blink 1.3s infinite ease-in-out;
+  }
+  .dots i:nth-child(2) { animation-delay: .18s; }
+  .dots i:nth-child(3) { animation-delay: .36s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .dots i { animation: none; opacity: .5; } }
+
+  form {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font: inherit;
+    /* 16px exactly: anything smaller makes iOS Safari zoom the page on focus. */
+    font-size: 16px;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  input:focus { outline: 2px solid var(--user); outline-offset: -1px; border-color: transparent; }
+  button {
+    padding: 0 20px;
+    min-height: 44px;         /* a comfortable touch target */
+    border: 0; border-radius: 10px;
+    background: var(--user); color: var(--user-ink);
+    font: inherit; font-weight: 600; cursor: pointer;
+    flex: none;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+
+  @media (max-width: 560px) {
+    #thread { padding: 16px 14px; }
+    form { padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    .msg, .meta { max-width: 94%; }
+    header { padding: 12px 14px; padding-top: max(12px, env(safe-area-inset-top)); }
+    header p { font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
@@ -45,11 +242,13 @@
   </header>
 
   <div id="thread">
-    <div class="bot msg">Ask me whether an outdoor plan is advisable — for example, "is it safe to bike to work in Bhopal today?" I'll check the live forecast and answer from our written guidance, or tell you plainly if we don't have any.</div>
+    <div class="bot msg">Ask me whether an outdoor plan is advisable — for example, “is it safe to bike to work in Bhopal today?” I’ll check the live forecast and answer from our written guidance, or tell you plainly if we don’t have any.</div>
+    <div class="chips" id="chips"></div>
   </div>
 
   <form id="form">
-    <input id="input" autocomplete="off" placeholder="Is it safe to cycle in Bhopal today?" autofocus>
+    <input id="input" autocomplete="off" enterkeyhint="send"
+           placeholder="Is it safe to cycle in Bhopal today?" autofocus>
     <button id="send" type="submit">Send</button>
   </form>
 </div>
@@ -59,63 +258,108 @@
 // which matches the spec: no persistence across sessions.
 const sessionId = (() => {
   let id = sessionStorage.getItem("wab-session");
-  if (!id) { id = "s-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-             sessionStorage.setItem("wab-session", id); }
+  if (!id) {
+    id = "s-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem("wab-session", id);
+  }
   return id;
 })();
 
 const thread = document.getElementById("thread");
-const form = document.getElementById("form");
-const input = document.getElementById("input");
-const send = document.getElementById("send");
+const form   = document.getElementById("form");
+const input  = document.getElementById("input");
+const send   = document.getElementById("send");
+const chips  = document.getElementById("chips");
+
+const STARTERS = [
+  "Is it safe to cycle in Bhopal today?",
+  "Can I take my 6-year-old to the park in Chennai this afternoon?",
+  "Is today good for a picnic in Lisbon?",
+  "Can I walk my dog in Dubai today?",
+];
+STARTERS.forEach(text => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "chip";
+  b.textContent = text;
+  b.addEventListener("click", () => { input.value = text; ask(); });
+  chips.appendChild(b);
+});
+
+function scroll() { thread.scrollTop = thread.scrollHeight; }
 
 function add(cls, text) {
   const el = document.createElement("div");
   el.className = cls;
-  el.textContent = text;
+  if (text !== undefined) el.textContent = text;
   thread.appendChild(el);
-  thread.scrollTop = thread.scrollHeight;
+  scroll();
   return el;
 }
 
 function addMeta(data) {
   const el = document.createElement("div");
   el.className = "meta";
+
   if (data.citations && data.citations.length) {
+    const row = document.createElement("div");
+    row.className = "cites";
     data.citations.forEach((c, i) => {
       const tag = document.createElement("span");
-      tag.className = "cite";
-      tag.textContent = c.id + " · " + c.severity;
-      tag.title = c.title + (i === 0 ? " (leading policy)" : " (also relevant)");
-      el.appendChild(tag);
+      tag.className = "cite sev-" + (c.severity || "info");
+      tag.title = c.title + (i === 0 ? " — leading policy" : " — also relevant");
+      const dot = document.createElement("span"); dot.className = "dot";
+      const id  = document.createElement("span"); id.textContent = c.id;
+      const sev = document.createElement("span"); sev.className = "sev"; sev.textContent = c.severity;
+      tag.append(dot, id, sev);
+      row.appendChild(tag);
     });
+    el.appendChild(row);
   } else if (data.no_guidance) {
     const s = document.createElement("span");
-    s.className = "flag"; s.textContent = "No policy covers this";
+    s.className = "flag";
+    s.textContent = "No policy covers this";
     el.appendChild(s);
   } else if (data.failed) {
     const s = document.createElement("span");
-    s.className = "flag"; s.textContent = "No forecast available — nothing invented";
+    s.className = "flag";
+    s.textContent = "No forecast available — nothing invented";
     el.appendChild(s);
   }
+
   if (data.trace && data.trace.length) {
-    const t = document.createElement("div");
-    t.className = "trace";
-    t.textContent = data.trace.join(" → ");
-    el.appendChild(t);
+    const d = document.createElement("details");
+    d.className = "trace";
+    // Open on wide screens, closed on phones: the path is evidence, but on a small
+    // screen it would push the advice itself off the top.
+    d.open = window.matchMedia("(min-width: 700px)").matches;
+    const sum = document.createElement("summary");
+    sum.textContent = data.trace.length + " steps";
+    const body = document.createElement("div");
+    body.className = "trace-body";
+    body.textContent = data.trace.join("  →  ");
+    d.append(sum, body);
+    el.appendChild(d);
   }
+
   thread.appendChild(el);
-  thread.scrollTop = thread.scrollHeight;
+  scroll();
 }
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+async function ask() {
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || send.disabled) return;
+
+  chips.remove();
   add("user msg", text);
   input.value = "";
   send.disabled = true;
-  const pending = add("bot msg", "Checking the forecast…");
+
+  const pending = add("bot msg");
+  const dots = document.createElement("span");
+  dots.className = "dots";
+  dots.innerHTML = "<i></i><i></i><i></i>";
+  pending.appendChild(dots);
 
   try {
     const res = await fetch("/chat", {
@@ -133,8 +377,11 @@ form.addEventListener("submit", async (e) => {
   } finally {
     send.disabled = false;
     input.focus();
+    scroll();
   }
-});
+}
+
+form.addEventListener("submit", (e) => { e.preventDefault(); ask(); });
 </script>
 </body>
 </html>

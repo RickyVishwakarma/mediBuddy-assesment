@@ -53,7 +53,14 @@ JS, no build step; FastAPI serves it, so there's no second process and no CORS. 
 session id in `sessionStorage` which becomes the graph's `thread_id`, so a refresh starts
 a new session — matching "memory resets between sessions".
 
-**Evals** — `python evals/run_evals.py`. Five cases are offline and need no API key.
+Colour is spent on exactly one thing: the **severity** of the cited policy, because that
+is the part of an answer a user acts on before reading a word of it. Each reply also
+carries the path the graph took through its nodes — expanded on a desktop, collapsed on a
+phone — since "why did it say that" is the question this project exists to answer, and
+the route is half of it. Works down to 320px; the composer sits above the iOS home
+indicator and the input is 16px so Safari doesn't zoom the page when you focus it.
+
+**Evals** — `python evals/run_evals.py`. Eight cases are offline and need no API key.
 
 
 ### If a reply comes back plain
