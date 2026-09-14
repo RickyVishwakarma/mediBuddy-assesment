@@ -47,7 +47,7 @@ graph TD
 | `compose_answer` | **LLM** | re-words the selected policy |
 | `verify_grounding` | code | the guard; can discard the model's output |
 | `deterministic_render` | code | policy text + snapshot, no model |
-| `no_match_response` | code | fixed constant |
+| `no_match_response` | code | one of three fixed templates, chosen by how it arrived |
 | `failure_response` | code | fixed template, no weather figures possible |
 
 ---
@@ -147,6 +147,15 @@ The five branch points:
 `parse_intent` exiting straight to `no_match_response` means an out-of-scope question never
 spends a geocoding or weather call, and keeps the "no guidance" path visibly distinct from
 "couldn't get data" in the trace.
+
+That node is reached two ways, and the difference matters to the user. Arriving from
+`parse_intent` means the question was outside what we cover at all. Arriving from
+`match_sops` means we resolved the place, fetched the forecast, and *our own policy set*
+had nothing to say about it. Both used to share one message, which told a picnic question
+that we only cover "cycling, running, commuting" -- while `SOP-LP-001` lists `picnic` in
+its own `applies_to`. Disclaiming coverage we have reads as a scope problem when it is a
+policy-set problem, so the node now picks its wording from `state["snapshot"]`: present
+means we looked and found nothing, absent means we never looked.
 
 ---
 

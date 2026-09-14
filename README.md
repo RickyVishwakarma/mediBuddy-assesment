@@ -394,27 +394,52 @@ parsed out of prose. All four terminal nodes set it, or set `no_guidance`/`faile
 reads the snapshot — it cannot contain a forecast. Geocoding empty, geocoding error,
 forecast error, timeout, and a 200 with no `current` block all route to it.
 
+Transport failures are retried first, because honesty about a problem that has already
+passed is still unhelpful: Open-Meteo drops roughly one connection in five, and without a
+retry that blip became "I couldn't retrieve the forecast" for a call that would have
+succeeded immediately afterwards. HTTP statuses are deliberately **not** retried — a 429
+is an answer, and asking again is both useless and rude.
+
 **Never invents advice.** `no_match_response` returns a fixed constant.
 
 **Numbers come from the API** — [`app/guards/grounding.py`](app/guards/grounding.py):
 
 ```
-allow-set = every numeric value in the snapshot + every number in the cited policies
 durations stripped first ("over the next 24 hours") — a reading never carries a time unit
-pass 1: numbers with a weather unit ("30 km/h", "20 C", "60%") must be in the allow-set
-pass 2: everything else must be too, or be a small unit-less count (0–10)
-reject → retry once stricter → then render the policy deterministically
+
+pass 1  a number WITH a unit must match a reading of that same quantity
+          "28.8 C"     checked against temperature fields only
+          "11.7 km/h"  checked against wind fields only
+          "96%"        checked against percentage fields only
+pass 2  a number without a unit must appear somewhere in the forecast,
+          or be a small unit-less count (0–10) — "both hands", "two layers"
+pass 3  non-numeric claims, checked against the snapshot (see below)
+
+reject → retry once, stricter → then render the policy deterministically
 ```
 
-Also rejects a reply citing a policy id that wasn't selected, which is what stops a user
-talking it into confirming a policy that doesn't exist.
+**Why the allow-set is typed.** It began as one flat bag of numbers, and that was not
+enough. Wind was 11.7 km/h, so the string "12" was legitimately in the bag — and
+*"it's only about 12 degrees"* passed the guard while the real temperature was 28.7 °C.
+Every number in that sentence came from the forecast. It was still false, because the
+number was real as a *wind speed* and fabricated as a *temperature*.
+
+So each unit now maps to the snapshot fields it can describe, and a policy's own
+thresholds are paired with the field they constrain. A rain threshold cannot vouch for a
+temperature. The forecast timestamp is excluded from every typed set, which is what stops
+*"2026 °C"* and *"13 °C"* — the year and the day of the month — reading as temperatures.
+
+The guard also rejects a reply citing a policy id that wasn't selected, which stops a user
+talking it into confirming a policy that doesn't exist. It may name an id the **user**
+raised, so it can say "we have no SOP-99"; it may never introduce one of its own.
 
 **The honest limit:** a cited policy's own thresholds are allowed, so the bot can say "our
 guidance applies above 50 km/h". So the defensible claim is slightly narrower than "every
 number came from the API":
 
 > **No number in a reply is ever originated by the model.** Each traces to the API
-> response for that request, or to a reviewed policy file.
+> response for that request, or to a reviewed policy file — and must be the right *kind*
+> of number for the claim it is making.
 
 **Non-numeric claims are checked too** — [`app/guards/claims.py`](app/guards/claims.py). A
 sentence like "the storm covers only part of today" or "there's water sitting on the road"
