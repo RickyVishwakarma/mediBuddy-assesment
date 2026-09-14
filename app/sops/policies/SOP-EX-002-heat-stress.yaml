@@ -12,7 +12,11 @@ applies_to:
   # scoped to exertion, but 38 C does not care whether you are running through it or
   # sitting in it, and sitting in it is often the longer exposure.
   activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor,
-               commute, picnic, children_play]
+               commute, picnic, children_play,
+               # 43 C reaches a motorcyclist in gear, the person on the other end of the
+               # dog lead, and an older adult most of all -- SOP-VG-002 covers them in
+               # cold and had no heat equivalent, which is backwards.
+               motorcycle, pet_walk, elderly_outing]
   intent_hint: "user plans sustained physical effort outdoors"
 
 # Apparent temperature, not raw temperature: humidity is what defeats sweat cooling,

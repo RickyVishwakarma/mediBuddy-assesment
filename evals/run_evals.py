@@ -73,7 +73,7 @@ SOP-EX-001. Neither contains a word from the rule's trigger vocabulary.
 **Adversarial choice.** Three are covered. I rate numeric coercion highest: a jailbroken
 tone is embarrassing, but a confidently wrong number is what a user acts on.
 
-## Fifteen defects found, and what caught them
+## Sixteen defects found, and what caught them
 
 The suite found **two**. Recorded because "it passed" only means something if it could
 have failed -- and defect 11 is the case in point: the suite caught a discrepancy between
@@ -97,6 +97,7 @@ than the product.
 | 13 | Five more coverage holes, all the same shape, found in one pass once the check stopped sampling and started sweeping. An ordinary 55% chance of rain matched nothing -- the all-clear stands down at 40%, the rain advisory starts at 70%, and the most common weather there is fell between them, so the brief's own example question answered "we have no guidance" while its follow-up answered correctly. Sweeping the other axes then found 3-4 C in still air (the all-clear's floor is 5, cold exposure's ceiling was 2), and three activity-scoping holes where heat, cold and rain rules were written for people moving through weather and so said nothing to anyone sitting in it -- a picnic at 38 C, at -15 C, or in a 70% chance of rain matched no policy at all. Added SOP-TR-005, moved the cold threshold to meet the all-clear exactly, widened three activity lists. The lesson is in the check rather than the rules: `policy_coverage` tested hand-picked days, so it only ever asked about conditions someone had already thought of, and both ends of every range passed while the middles did not. It now walks each axis end to end. | **the eval suite** |
 | 14 | The grounding guard accepted a fabricated temperature. Its allow-set was one flat bag of numbers with no notion of which quantity each belonged to, so any reading vouched for any claim: with wind at 11.7 km/h the string "12" was in the bag, and "it's only about 12 degrees" passed while the real temperature was 28.7 C -- the exact numeric-coercion attack the guard exists to stop. Two more ways in: the forecast timestamp was split into digits and added to the same bag, so "2026 C" and "13 C" also passed; and bare "C" was not in the unit pattern, so "12 C" never even reached the strict pass. Each unit is now mapped to the snapshot fields it can legitimately describe, policy thresholds are paired with the field they constrain, and the timestamp is excluded from every typed set. The adversarial eval case passed throughout, because it samples one number and that number happened not to collide. | probing the guard |
 | 15 | A single dropped TCP connection failed the whole turn. Open-Meteo resets roughly one connection in five from here, and `fetch_forecast` had no retry at all while the LLM client had a careful one -- so a blip that the next call would have survived became "I couldn't retrieve the forecast", an honest message about a problem that had already gone away. Transport failures are now retried three times with a short backoff. HTTP statuses deliberately are not: a status is an answer, and asking a 429 again is both useless and rude. | running the app |
+| 16 | Four more activity-scoping holes, and the check that should have found them had the same blind spot for the third time. Asked "can I walk my dog in Dubai today?" at 41.2 C, the bot warned carefully about the dog's paws and said nothing at all to the person holding the lead: `pet_walk` was missing from both the heat-stress and UV rules. Sweeping every activity the policy set actually names found three more -- a motorcyclist in gear at 43 C, an older adult at 43 C (the vulnerable-groups category covers them in cold and had no heat equivalent, which is backwards), and gardening at -10 C. The cause each time was that `policy_coverage` tested a hand-written list of activities, so it only ever asked about the ones someone had already thought of. It now derives the list from the policies themselves, which removes the judgement call that had been wrong three times. | reading transcripts |
 
 **Non-numeric claims.** Defects 4, 6 and 7 all involved sentences rather than figures:
 every number in those replies was real, and the problem was which window, which rule, or
@@ -762,6 +763,22 @@ advice: added while the process was running
     return problems
 
 
+def _known_activities() -> list[str]:
+    """Every activity named in any policy's applies_to, straight from the files.
+
+    `driving` is excluded from the heat and cold sweeps by the caller's fixtures rather
+    than here: an enclosed vehicle is genuinely a different exposure, and it is covered
+    for the things that do reach it -- rain and visibility.
+    """
+    from app.sops.loader import load_policies as _load
+    found: set[str] = set()
+    for policy in _load():
+        acts = policy.applies_to.activities
+        if acts != ["*"]:
+            found.update(acts)
+    return sorted(found - {"driving"})
+
+
 def check_policy_coverage() -> list[str]:
     """Ordinary weather must not fall through every policy.
 
@@ -838,11 +855,13 @@ def check_policy_coverage() -> list[str]:
     problems: list[str] = []
     for label, over in days:
         s = snap(**over)
-        # Leisure activities were missing from this list, which is why the hole survived:
-        # the check only ever asked as a cyclist or a commuter, and those two are in every
-        # hazard rule's activity list. A picnic is in far fewer of them, so it is the
-        # activity that actually exercises the coverage question.
-        for activity in ("cycling", "commute", "picnic", "general_outdoor"):
+        # Derived, never hand-written. This list was picked by hand twice and grew a new
+        # hole each time -- first it was only cyclists and commuters, then picnics were
+        # added and pet_walk, motorcycle and elderly_outing were still missing, so a
+        # 43 C dog walk warned about the dog's paws and said nothing about the person
+        # holding the lead. Asking the policy set which activities it claims to cover
+        # removes the judgement call that kept being wrong.
+        for activity in _known_activities():
             if not match_policies(pol, s, activity):
                 problems.append(
                     f"no policy matched '{activity}' on {label} -- the bot would answer "
@@ -868,7 +887,7 @@ def check_policy_coverage() -> list[str]:
     for field, values in sweeps.items():
         for value in values:
             s = snap(**{field: float(value)})
-            for activity in ("cycling", "commute", "picnic", "general_outdoor"):
+            for activity in _known_activities():
                 if not match_policies(pol, s, activity):
                     problems.append(
                         f"sweep hole: {field}={value} matched no policy for '{activity}' "

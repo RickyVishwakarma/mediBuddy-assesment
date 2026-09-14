@@ -14,7 +14,7 @@ override: false
 # UV 6.7 matched no policy at all as a result.
 applies_to:
   activities: [cycling, running, hiking, sports, gardening, walking, commute,
-               picnic, general_outdoor]
+               picnic, general_outdoor, motorcycle, pet_walk, elderly_outing]
   intent_hint: "user plans to be outdoors and exposed for a sustained stretch"
 
 # Threshold sits at 6, not the 8 that marks the "very high" band, precisely because these

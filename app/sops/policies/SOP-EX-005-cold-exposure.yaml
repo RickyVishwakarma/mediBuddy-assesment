@@ -9,7 +9,7 @@ applies_to:
   # -15 C matching no policy at all for anyone sitting still outdoors -- the activity
   # cold punishes hardest, not least.
   activities: [cycling, motorcycle, running, walking, hiking, sports, commute, pet_walk,
-               general_outdoor, picnic, children_play]
+               general_outdoor, picnic, children_play, gardening]
   intent_hint: "user plans to be outdoors for a while in genuinely cold air"
 
 # The set had heat stress (SOP-EX-002) and nothing for cold beyond SOP-VG-002, which is
