@@ -1,0 +1,49 @@
+id: SOP-TR-005
+title: Rain likely enough to plan around, not heavy enough to delay you
+category: travel_commute
+severity: advisory
+override: false
+
+applies_to:
+  activities: ["*"]
+  intent_hint: "any outdoor plan on a day the forecast is unsettled but not yet wet"
+
+# The all-clear (SOP-GEN-001) requires the chance of rain to be under 40%. The rain
+# advisory (SOP-TR-001) starts at 70%, or at 4 mm actually falling. Everything between
+# was uncovered, and it is the single most common weather there is: a grey day that might
+# rain on you.
+#
+# The gap was not theoretical. Bhopal at 55% matched no policy at all, so the bot answered
+# "none of our written policies apply" to the example question in the brief -- honest, and
+# useless. The same day's evening (94%) answered correctly, which is what made the hole
+# hard to see: the follow-up worked while the first question did not.
+#
+# Originally capped at 70% to sit neatly in the gap, which left a second hole one step
+# further along: SOP-TR-001 is scoped to travel, so a picnic in a 70% chance of rain still
+# matched nothing at all. Rain falls on everyone, so this rule covers every activity and
+# has no upper bound. Above 70% a commuter gets SOP-TR-001 leading on specificity, with
+# this trailing it; a picnicker gets this, which is the coverage that was missing.
+match:
+  all:
+    - {field: precipitation_probability_pct, op: gte, value: 40}
+    - {field: heavy_rain_regime, op: is_false}
+
+advice: |
+  Rain is likely enough for this window to be worth planning for.
+
+  Take a jacket or something waterproof for anything you can't easily abandon halfway,
+  and if the plan has a flexible start, an earlier one is usually the safer bet --
+  unsettled days more often deteriorate than improve.
+
+compose_notes: >
+  Quote the chance of rain so the user can judge it for themselves. Match the strength of
+  the wording to that figure rather than using one tone for the whole range: a 45% chance
+  and a 95% chance are both covered by this rule and they do not warrant the same
+  sentence. Do not tell anyone to postpone -- this rule is about being prepared, and the
+  policies that do recommend delay will say so themselves.
+
+rationale: >
+  A policy set that speaks only about certainties is silent on most real days. Covering
+  the middle of the probability range is what stops "we have no guidance" from being the
+  answer to ordinary weather, and keeps the genuine advisory at 70% meaning something when
+  it does fire.

@@ -5,7 +5,11 @@ severity: caution
 override: false
 
 applies_to:
-  activities: [cycling, motorcycle, running, walking, hiking, sports, commute, pet_walk, general_outdoor]
+  # `picnic` and `children_play` were missing, so a sweep of the temperature axis found
+  # -15 C matching no policy at all for anyone sitting still outdoors -- the activity
+  # cold punishes hardest, not least.
+  activities: [cycling, motorcycle, running, walking, hiking, sports, commute, pet_walk,
+               general_outdoor, picnic, children_play]
   intent_hint: "user plans to be outdoors for a while in genuinely cold air"
 
 # The set had heat stress (SOP-EX-002) and nothing for cold beyond SOP-VG-002, which is
@@ -16,9 +20,14 @@ applies_to:
 # Keyed on apparent temperature rather than air temperature for the same reason as the
 # heat rule: wind chill is what the body actually experiences, and on a bike you generate
 # your own. A still 2 C day and a 6 C day with a stiff wind are the same problem.
+# The bare threshold sits at 5, not 2, so that it meets SOP-GEN-001's floor exactly.
+# At 2 there was a three-degree band -- 3 C and 4 C in still air -- where the all-clear
+# had stood down but nothing had taken over, and a sweep of the axis found it. Thresholds
+# that bound the same variable from opposite sides have to touch, or the gap between them
+# is a silent "we have no guidance".
 match:
   any:
-    - {field: apparent_temperature_c, op: lte, value: 2}
+    - {field: apparent_temperature_c, op: lte, value: 5}
     - all:
         - {field: apparent_temperature_c, op: lte, value: 8}
         - {field: wind_speed_kmh, op: gte, value: 25}

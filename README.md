@@ -17,7 +17,7 @@ the model's judgement**.
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-**State:** 15 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
+**State:** 16 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
 and the notes on what the suite missed — are generated into
 **[EVAL_RESULTS.md](EVAL_RESULTS.md)** by `python evals/run_evals.py`; that file is the
 source of truth rather than a number copied into this one.
@@ -104,16 +104,17 @@ adding a rule the same thing as adding a file.
 | `SOP-EX-003` | outdoor_exercise | warning | Gusts ≥ 20 km/h above the prevailing wind, on two wheels |
 | `SOP-VG-001` | vulnerable_groups | warning | Child outdoors, UV ≥ 7 or apparent temp ≥ 35 |
 | `SOP-EX-001` | outdoor_exercise | caution | UV ≥ 6 during a sustained activity |
-| `SOP-EX-005` | outdoor_exercise | caution | Apparent temp ≤ 2 °C, or ≤ 8 °C with wind ≥ 25 |
+| `SOP-EX-005` | outdoor_exercise | caution | Apparent temp ≤ 5 °C, or ≤ 8 °C with wind ≥ 25 |
 | `SOP-VG-002` | vulnerable_groups | caution | Older adult, apparent temp ≤ 5, or ≤ 12 with wind ≥ 30 |
 | `SOP-VG-003` | vulnerable_groups | caution | Dog walk, temp ≥ 32 with clear sky — pavement burns |
 | `SOP-TR-004` | travel_commute | warning | Visibility ≤ 2 km — short sight lines, whatever the cause |
 | `SOP-TR-001` | travel_commute | advisory | Rain ≥ 4 mm with visibility ≤ 5 km, or ≥ 70% chance of rain |
 | `SOP-LP-001` | leisure_planning | advisory | **Fuzzy** — a relaxed outing is a poor bet |
+| `SOP-TR-005` | travel_commute | advisory | Chance of rain ≥ 40% — likely enough to plan around |
 | `SOP-GEN-002` | general_conditions | advisory | Apparent temp 32–38 °C in dry air — warm, below heat stress |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
 
-**Every one of the 15 carries its own `rationale` field** explaining why that threshold,
+**Every one of the 16 carries its own `rationale` field** explaining why that threshold,
 on that variable, at that severity — so the reasoning sits next to the rule rather than in
 a document that can drift from it. The four highlighted below are the ones whose reasoning
 generalises; the rest explain themselves in their files.
@@ -447,11 +448,11 @@ wrong *number* is what a user acts on.
 
 ### What the suite missed
 
-Twelve defects surfaced while building this. **The suite found two.** The rest came from
+Thirteen defects surfaced while building this. **The suite found two.** The rest came from
 probing the guard with a fabricated reply, reading the fallback's real output and reading
 traces, asking ordinary follow-ups in the chat UI, auditing the policies twice — for pairs
 that contradict, and for advice untrue on its own triggers — and simply running the app
-and asking the brief's own example question. All twelve are in
+and asking the brief's own example question. All thirteen are in
 [EVAL_RESULTS.md](EVAL_RESULTS.md).
 
 The twelfth is the sharpest, because the check written to prevent it had the same blind

@@ -8,7 +8,11 @@ applies_to:
   # `commute` is included deliberately: getting to work in this means walking to a stop,
   # standing on a platform, or riding in it. Leaving it out meant a question about
   # commuting on a 41 C day matched no policy at all and got "we have no guidance".
-  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor, commute]
+  # `picnic` and `children_play` added for the same reason `commute` was: the rule was
+  # scoped to exertion, but 38 C does not care whether you are running through it or
+  # sitting in it, and sitting in it is often the longer exposure.
+  activities: [cycling, running, walking, hiking, sports, gardening, general_outdoor,
+               commute, picnic, children_play]
   intent_hint: "user plans sustained physical effort outdoors"
 
 # Apparent temperature, not raw temperature: humidity is what defeats sweat cooling,

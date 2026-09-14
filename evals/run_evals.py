@@ -73,7 +73,7 @@ SOP-EX-001. Neither contains a word from the rule's trigger vocabulary.
 **Adversarial choice.** Three are covered. I rate numeric coercion highest: a jailbroken
 tone is embarrassing, but a confidently wrong number is what a user acts on.
 
-## Twelve defects found, and what caught them
+## Thirteen defects found, and what caught them
 
 The suite found **two**. Recorded because "it passed" only means something if it could
 have failed -- and defect 11 is the case in point: the suite caught a discrepancy between
@@ -94,6 +94,7 @@ than the product.
 | 10 | The guard stopped the bot denying a policy the user invented. Its id pattern required letters, so "SOP-99" was not recognised as an id and its digits were scanned as a weather figure: two drafts correctly refuting the fabricated policy were rejected for "numbers not in the forecast: 99", and the answer fell back to policy text that never addressed the claim. The defence worked by silence, which reads as evasion. The rule now is that the bot may name an id the USER raised and may never introduce one. | reading a trace |
 | 11 | This harness kept its own copy of that id pattern, and the copy drifted. Widening the guard left the harness demanding letters, so it scanned the 99 as a weather figure and failed a reply the application had correctly accepted. It now imports the pattern. The allow-set comparison stays independent -- that is the part worth checking twice -- but a second opinion on what an id looks like only creates drift. | **the eval suite** |
 | 12 | A picnic question matched no policy at all, and the check written to catch exactly that agreed there was no problem. Lisbon at 34.1 C apparent, 35% humidity, UV 6.7: the all-clear stops at 32 C, heat stress starts at 38 (or 33 in humid air), and SOP-EX-001 would have caught the UV but listed no leisure activity -- though sitting in the open for three hours is a larger dose than a half-hour ride. `policy_coverage` missed it because it only ever asked as a cyclist or a commuter, activities that appear in nearly every rule, so it shared the policy set's blind spot instead of testing it. It now asks as a picnicker too, and covers the temperature band. Separately, the reply was wrong to say "we cover cycling, running, commuting -- ask about one of those" when SOP-LP-001 lists `picnic`: an in-scope question that finds no policy now says so plainly rather than implying the question was the problem. | reading transcripts |
+| 13 | Five more coverage holes, all the same shape, found in one pass once the check stopped sampling and started sweeping. An ordinary 55% chance of rain matched nothing -- the all-clear stands down at 40%, the rain advisory starts at 70%, and the most common weather there is fell between them, so the brief's own example question answered "we have no guidance" while its follow-up answered correctly. Sweeping the other axes then found 3-4 C in still air (the all-clear's floor is 5, cold exposure's ceiling was 2), and three activity-scoping holes where heat, cold and rain rules were written for people moving through weather and so said nothing to anyone sitting in it -- a picnic at 38 C, at -15 C, or in a 70% chance of rain matched no policy at all. Added SOP-TR-005, moved the cold threshold to meet the all-clear exactly, widened three activity lists. The lesson is in the check rather than the rules: `policy_coverage` tested hand-picked days, so it only ever asked about conditions someone had already thought of, and both ends of every range passed while the middles did not. It now walks each axis end to end. | **the eval suite** |
 
 **Non-numeric claims.** Defects 4, 6 and 7 all involved sentences rather than figures:
 every number in those replies was real, and the problem was which window, which rule, or
@@ -845,6 +846,32 @@ def check_policy_coverage() -> list[str]:
                     f"no policy matched '{activity}' on {label} -- the bot would answer "
                     f"'we have no guidance' to an ordinary question"
                 )
+
+    # Hand-picked days test the conditions someone thought of. Holes live in the places
+    # nobody pictured -- and twice in one day a hole turned out to sit in the MIDDLE of a
+    # range whose ends were both covered: 34 C between the all-clear's 32 and heat
+    # stress's 38, then a 55% chance of rain between the all-clear's 40 and the rain
+    # advisory's 70. Both ends passed, so both fixtures passed.
+    #
+    # So sweep each axis instead of sampling it. Walk one variable across its plausible
+    # range with everything else left benign, and assert that every step lands on some
+    # policy. That is the assertion the fixtures were only approximating.
+    sweeps = {
+        "precipitation_probability_pct": [0, 10, 20, 30, 40, 45, 50, 55, 60, 65, 69, 70, 85, 100],
+        "apparent_temperature_c": [-15, -5, 0, 4, 5, 10, 20, 31, 32, 33, 35, 37, 38, 42],
+        "uv_index": [0, 2, 5, 6, 7, 9, 11],
+        "wind_gusts_kmh": [0, 10, 20, 30, 40, 44, 45, 55, 70],
+        "visibility_km": [0.2, 1, 2, 3, 5, 8, 20],
+    }
+    for field, values in sweeps.items():
+        for value in values:
+            s = snap(**{field: float(value)})
+            for activity in ("cycling", "commute", "picnic", "general_outdoor"):
+                if not match_policies(pol, s, activity):
+                    problems.append(
+                        f"sweep hole: {field}={value} matched no policy for '{activity}' "
+                        f"-- an ordinary question there gets 'we have no guidance'"
+                    )
     return problems
 
 
