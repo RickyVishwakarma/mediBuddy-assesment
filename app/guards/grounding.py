@@ -37,23 +37,59 @@ SOP_ID_RE = re.compile(r"\bSOP[-_ ]?(?:[A-Za-z]{1,5}[-_ ]?)?\d{1,4}\b", re.IGNOR
 # hole (a hallucinated "30 km/h" passed as a prose number until this was tightened).
 SMALL_COUNTS = {str(n) for n in range(0, 11)}
 
-# A number carrying one of these is making a weather claim, and gets NO prose allowance:
-# it must come from the API or from the cited policy's own text.
-UNIT_AFTER_RE = re.compile(
-    r"(\d[\d,]*(?:\.\d+)?)\s*"
-    r"(?:°\s*[CF]\b|º\s*[CF]\b|\bdeg(?:rees)?\b|\bcelsius\b|\bfahrenheit\b"
-    r"|\bkm\s*/?\s*h\b|\bkmh\b|\bkph\b|\bmph\b|\bm/s\b"
-    r"|\bmm\b|\bcm\b|%|\bpercent\b|\bper\s?cent\b"
-    r"|\bkm\b(?!\s*/)|\bmiles?\b)",
-    re.IGNORECASE,
-)
-# ... and the same claim written the other way round: "a UV index of 8".
-UNIT_BEFORE_RE = re.compile(
-    r"(?:uv(?:\s+index)?|index|humidity|temperature|wind|gusts?|rainfall|precipitation|"
-    r"visibility|chance|probability)\s*(?:of|is|at|around|near|reaching|to)?\s*"
-    r"(\d[\d,]*(?:\.\d+)?)",
-    re.IGNORECASE,
-)
+# A number carrying a unit is making a weather claim, and gets NO prose allowance: it
+# must come from the API or from the cited policy's own text.
+#
+# Crucially it must also be the RIGHT KIND of number. The allow-set used to be one flat
+# bag, so any value from any field vouched for any claim: with wind at 11.7 km/h, "12"
+# was in the bag, and "it's only about 12 degrees" passed while the real temperature was
+# 28.7 C. That is the numeric-coercion attack the guard exists to stop, and it walked
+# through. Each unit is therefore mapped to the snapshot fields it can legitimately
+# describe, and a temperature claim is checked against temperatures alone.
+_N = r"(\d[\d,]*(?:\.\d+)?)"
+
+UNIT_AFTER_PATTERNS = {
+    # Bare "C" and "F" are included deliberately. They were missing, so "12 C" never
+    # reached this pass at all -- it fell through to the prose rules, which are laxer.
+    # The degree signs are written as escapes rather than literals: this file has been
+    # corrupted twice by an editor writing them in the wrong encoding, and a mangled
+    # byte inside a character class silently stops the whole alternation matching.
+    "temperature": re.compile(
+        _N + r"\s*(?:\u00b0\s*[CF]\b|\u00ba\s*[CF]\b|[CF]\b"
+             r"|\bdeg(?:rees)?\b|\bcelsius\b|\bfahrenheit\b)",
+        re.IGNORECASE),
+    "wind": re.compile(
+        _N + r"\s*(?:\bkm\s*/\s*h\b|\bkmh\b|\bkph\b|\bmph\b|\bm\s*/\s*s\b)",
+        re.IGNORECASE),
+    "rain": re.compile(_N + r"\s*(?:\bmm\b|\bcm\b)", re.IGNORECASE),
+    "percent": re.compile(_N + r"\s*(?:%|\bpercent\b|\bper\s?cent\b)", re.IGNORECASE),
+    # The lookahead keeps "12 km/h" out of the distance class; that is wind, above.
+    "distance": re.compile(_N + r"\s*(?:\bkm\b(?!\s*/)|\bmiles?\b)", re.IGNORECASE),
+}
+
+# ... and the same claim written the other way round: "a UV index of 8". The leading
+# noun is what names the quantity here, so it selects the class directly.
+_LEAD = r"\s*(?:of|is|at|around|near|reaching|to|sits at)?\s*"
+UNIT_BEFORE_PATTERNS = {
+    "temperature": re.compile(r"(?:temperature|feels\s+like|apparent)" + _LEAD + _N, re.IGNORECASE),
+    "wind": re.compile(r"(?:wind|gusts?)" + _LEAD + _N, re.IGNORECASE),
+    "rain": re.compile(r"(?:rainfall|precipitation)" + _LEAD + _N, re.IGNORECASE),
+    "percent": re.compile(r"(?:humidity|chance|probability)" + _LEAD + _N, re.IGNORECASE),
+    "distance": re.compile(r"(?:visibility)" + _LEAD + _N, re.IGNORECASE),
+    "uv": re.compile(r"(?:uv(?:\s+index)?|index)" + _LEAD + _N, re.IGNORECASE),
+}
+
+# Which snapshot fields each quantity may be checked against.
+QUANTITY_FIELDS = {
+    "temperature": {"temperature_c", "apparent_temperature_c", "temp_max_24h_c",
+                    "temp_min_24h_c", "apparent_temp_max_24h_c"},
+    "wind": {"wind_speed_kmh", "wind_gusts_kmh", "gust_differential_kmh",
+             "gust_peak_24h_kmh"},
+    "rain": {"precipitation_mm", "rain_24h_mm"},
+    "percent": {"precipitation_probability_pct", "humidity_pct", "cloud_cover_pct"},
+    "distance": {"visibility_km"},
+    "uv": {"uv_index", "uv_max_24h"},
+}
 
 CLOCK_RE = re.compile(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)\b")
 HOUR_RE = re.compile(r"\b(1[0-2]|[1-9])\s?(?:am|pm)\b", re.IGNORECASE)
@@ -95,20 +131,76 @@ def _normalise_id(raw: str) -> str:
     return re.sub(r"[-_ ]", "-", raw.strip().upper())
 
 
+def _renderings(value: float) -> set[str]:
+    """The forms a model might write one number in: 7, 7.0, 7.35."""
+    out = {f"{value:.1f}", f"{value:.0f}", str(value)}
+    if float(value).is_integer():
+        out.add(str(int(value)))
+    return out
+
+
+def _walk_conditions(node, out: list[tuple[str, float]]) -> None:
+    """Collect (field, threshold) pairs from a policy's match tree.
+
+    A policy's own thresholds are quotable -- "our guidance applies above 50 km/h" -- but
+    only as the quantity they actually constrain. Pairing each number with its field is
+    what keeps a rain threshold from vouching for a temperature claim.
+    """
+    if isinstance(node, list):
+        for item in node:
+            _walk_conditions(item, out)
+        return
+    if not isinstance(node, dict):
+        return
+    if "field" in node and isinstance(node.get("value"), (int, float)) and not isinstance(node.get("value"), bool):
+        out.append((node["field"], float(node["value"])))
+    if "field" in node and isinstance(node.get("value"), list):
+        for v in node["value"]:
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                out.append((node["field"], float(v)))
+    for key in ("all", "any", "not"):
+        if key in node:
+            _walk_conditions(node[key], out)
+
+
 def build_allowset(snapshot: WeatherSnapshot, sops: list[SOP]) -> set[str]:
-    """Numbers the reply is permitted to contain.
+    """Every number the reply may contain, regardless of what it claims to be.
 
-    Two sources, both auditable: values the API returned for THIS request, and numbers
-    written into the policies being cited (so a reply may quote its own rule, "gusts
-    above 50 km/h", or a policy-authored instruction, "wait 30 minutes").
-
-    Note this does NOT include the prose small-count allowance -- see check(), which
-    applies that only to numbers that carry no weather unit.
+    Used only for numbers that carry NO unit, where the text gives us nothing to check
+    the quantity against. Unit-bearing claims go through build_typed_allowset instead.
     """
     allowed = snapshot.allowed_numbers()
     for sop in sops:
         allowed |= sop.numeric_literals()
     return allowed
+
+
+def build_typed_allowset(snapshot: WeatherSnapshot, sops: list[SOP]) -> dict[str, set[str]]:
+    """Per-quantity allow-sets: what a temperature claim may say, what a wind claim may say.
+
+    Deliberately excludes the forecast timestamp, which build_allowset does include. Its
+    digits are real data for an unqualified number ("the forecast is for the 13th") but
+    they are not readings, and while they sat in one flat bag "2026 C" and "13 C" both
+    passed as temperatures.
+    """
+    typed: dict[str, set[str]] = {}
+    for quantity, fields in QUANTITY_FIELDS.items():
+        values: set[str] = set()
+        for name in fields:
+            value = snapshot.fields.get(name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                values |= _renderings(float(value))
+        typed[quantity] = values
+
+    field_to_quantity = {f: q for q, fs in QUANTITY_FIELDS.items() for f in fs}
+    for sop in sops:
+        pairs: list[tuple[str, float]] = []
+        _walk_conditions(sop.match, pairs)
+        for name, value in pairs:
+            quantity = field_to_quantity.get(name)
+            if quantity:
+                typed[quantity] |= _renderings(value)
+    return typed
 
 
 def _matches(token: str, allowed: set[str]) -> bool:
@@ -155,11 +247,13 @@ def check(
     # "a UV index of 8"). These are held to the strict allow-set with no prose
     # allowance, because this is exactly where a fabricated figure would hide.
     claimed: set[str] = set()
-    for pattern in (UNIT_AFTER_RE, UNIT_BEFORE_RE):
-        for token in pattern.findall(scrubbed):
-            claimed.add(token)
-            if not _matches(token, allowed):
-                ungrounded.append(token)
+    typed = build_typed_allowset(snapshot, cited_sops)
+    for patterns in (UNIT_AFTER_PATTERNS, UNIT_BEFORE_PATTERNS):
+        for quantity, pattern in patterns.items():
+            for token in pattern.findall(scrubbed):
+                claimed.add(token)
+                if not _matches(token, typed.get(quantity, set())):
+                    ungrounded.append(token)
 
     # Pass 2 -- every other number. Small unit-less counts are ordinary prose.
     for token in NUMBER_RE.findall(scrubbed):

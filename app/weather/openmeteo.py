@@ -11,6 +11,7 @@ pay for breadth here to keep app/sops/policies/ purely declarative.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -97,6 +98,36 @@ class ResolvedLocation:
         return ", ".join(parts)
 
 
+# Open-Meteo drops roughly one connection in five from here -- a TCP reset mid-request
+# ("connection forcibly closed"), not a refusal. Without a retry that blip becomes a
+# user-visible "I couldn't retrieve the forecast", which is an honest message about a
+# problem that did not really exist: the same call succeeds immediately afterwards.
+#
+# Only transport failures are retried. An HTTP status is an answer -- a 429 means the
+# quota is spent and asking again is both useless and rude -- so those fall straight
+# through to the caller, and the honest-failure path still fires for anything real.
+HTTP_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 0.4
+
+
+def _get_with_retry(url: str, params: dict, what: str) -> httpx.Response:
+    last: Exception | None = None
+    for attempt in range(1, HTTP_ATTEMPTS + 1):
+        try:
+            resp = httpx.get(url, params=params, timeout=HTTP_TIMEOUT_SECONDS, headers=HEADERS)
+            resp.raise_for_status()
+            return resp
+        except (httpx.TimeoutException, httpx.HTTPStatusError):
+            raise
+        except httpx.HTTPError as exc:
+            last = exc
+            if attempt < HTTP_ATTEMPTS:
+                log.info("%s transport blip (attempt %s/%s): %s", what, attempt, HTTP_ATTEMPTS, exc)
+                time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+    assert last is not None
+    raise last
+
+
 def geocode(city: str) -> ResolvedLocation:
     """Resolve a place name to coordinates.
 
@@ -104,13 +135,11 @@ def geocode(city: str) -> ResolvedLocation:
     resolved label is surfaced in the reply so the user can catch a wrong Springfield.
     """
     try:
-        resp = httpx.get(
+        resp = _get_with_retry(
             GEOCODE_URL,
-            params={"name": city, "count": 5, "language": "en", "format": "json"},
-            timeout=HTTP_TIMEOUT_SECONDS,
-            headers=HEADERS,
+            {"name": city, "count": 5, "language": "en", "format": "json"},
+            "geocode",
         )
-        resp.raise_for_status()
         payload = resp.json()
     # The lookup being unreachable is a different thing from the place not existing, and
     # telling a user their spelling is wrong when the service merely timed out sends them
@@ -166,10 +195,7 @@ def fetch_forecast(location: ResolvedLocation) -> dict:
     # is logged. Without this, a rate-limited deployment and a slow network are the same
     # unhelpful "could not be reached" in the logs as well as on screen.
     try:
-        resp = httpx.get(
-            FORECAST_URL, params=params, timeout=HTTP_TIMEOUT_SECONDS, headers=HEADERS
-        )
-        resp.raise_for_status()
+        resp = _get_with_retry(FORECAST_URL, params, "forecast")
         payload = resp.json()
     except httpx.TimeoutException as exc:
         log.warning("forecast timed out after %ss for %s", HTTP_TIMEOUT_SECONDS, location.name)

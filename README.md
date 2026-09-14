@@ -448,11 +448,11 @@ wrong *number* is what a user acts on.
 
 ### What the suite missed
 
-Thirteen defects surfaced while building this. **The suite found two.** The rest came from
+Fifteen defects surfaced while building this. **The suite found two.** The rest came from
 probing the guard with a fabricated reply, reading the fallback's real output and reading
 traces, asking ordinary follow-ups in the chat UI, auditing the policies twice — for pairs
 that contradict, and for advice untrue on its own triggers — and simply running the app
-and asking the brief's own example question. All thirteen are in
+and asking the brief's own example question. All fifteen are in
 [EVAL_RESULTS.md](EVAL_RESULTS.md).
 
 The twelfth is the sharpest, because the check written to prevent it had the same blind
