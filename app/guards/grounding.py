@@ -286,6 +286,27 @@ def check(
     )
 
 
+# Split on a full stop that ends a sentence -- preceded by a letter or bracket, followed
+# by a capital. Decimals ("4.5 mm") and clock times ("before 10:00.") are left intact,
+# which a naive split on ". " would not manage.
+_SENTENCE_END = re.compile(r"(?<=[a-z\)])\.\s+(?=[A-Z])")
+
+
+def _gist(advice: str) -> str:
+    """The first sentence of a policy's advice.
+
+    Used for the policies that trail the leading one. Printing all three in full is how
+    a thunderstorm warning ends up followed by six paragraphs on sunscreen: everything
+    on screen is true, and the thing you needed is buried. A secondary hazard still has
+    to be surfaced -- suppressing it would be a safety regression -- but surfacing is
+    naming it, not reciting it.
+    """
+    first_para = advice.strip().split("\n\n")[0].replace("\n", " ").strip()
+    parts = _SENTENCE_END.split(first_para, maxsplit=1)
+    sentence = parts[0].strip()
+    return sentence if sentence.endswith((".", "!", "?")) else sentence + "."
+
+
 def render_deterministic(
     snapshot: WeatherSnapshot,
     selected: SOP,
@@ -316,8 +337,11 @@ def render_deterministic(
         "",
         selected.advice.strip(),
     ]
+    # One line each. The full text of every cited policy is what made a storm warning
+    # arrive with six paragraphs of sun advice attached; the id is printed so anyone who
+    # wants the rest can read the policy itself.
     for sop in secondary:
-        lines += ["", f"Also worth knowing — {sop.title.lower()}:", sop.advice.strip()]
+        lines += ["", f"Also relevant — {sop.title.lower()} ({sop.id}):", _gist(sop.advice)]
 
     lines += ["", "Based on this forecast:", snapshot.relevant_facts(fields)]
     ids = ", ".join([selected.id, *(s.id for s in secondary)])
