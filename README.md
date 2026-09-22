@@ -17,7 +17,7 @@ the model's judgement**.
 | Eval suite + results | [`evals/`](evals/) · **[EVAL_RESULTS.md](EVAL_RESULTS.md)** |
 | Honest notes on failures | [What the suite missed](#what-the-suite-missed) · [Known gaps](#known-gaps) |
 
-**State:** 16 policies, 6 categories, all 5 severities. Eval results — case count, pass/fail,
+**State:** 17 policies, 7 categories, all 5 severities. Eval results — case count, pass/fail,
 and the notes on what the suite missed — are generated into
 **[EVAL_RESULTS.md](EVAL_RESULTS.md)** by `python evals/run_evals.py`; that file is the
 source of truth rather than a number copied into this one.
@@ -120,6 +120,7 @@ adding a rule the same thing as adding a file.
 | `SOP-TR-005` | travel_commute | advisory | Chance of rain ≥ 40% — likely enough to plan around |
 | `SOP-GEN-002` | general_conditions | advisory | Apparent temp 32–38 °C in dry air — warm, below heat stress |
 | `SOP-GEN-001` | general_conditions | info | Nothing notable — all-clear (`only_if_alone`) |
+| `SOP-IN-001` | indoor_activity | info | Indoor game — sheltered from weather, always the all-clear |
 
 **Every one of the 16 carries its own `rationale` field** explaining why that threshold,
 on that variable, at that severity — so the reasoning sits next to the rule rather than in
@@ -255,7 +256,7 @@ list is rejected at load, with a suggestion.
 
 **Activities** for `applies_to`: `cycling` `motorcycle` `running` `walking` `hiking`
 `sports` `commute` `driving` `picnic` `children_play` `elderly_outing` `pet_walk`
-`gardening` `general_outdoor`.
+`gardening` `general_outdoor` `indoor_games`.
 
 **Two rules worth knowing before you write one.** A missing reading never counts as zero —
 if the API didn't return the field, the condition is false rather than true. And **the

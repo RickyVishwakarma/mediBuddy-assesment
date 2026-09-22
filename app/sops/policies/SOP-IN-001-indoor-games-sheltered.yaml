@@ -1,0 +1,43 @@
+id: SOP-IN-001
+title: Indoor games are sheltered from today's weather
+category: indoor_activity
+severity: info
+override: false
+
+applies_to:
+  activities: [indoor_games]
+  intent_hint: "user is asking about a game or play happening indoors, under a roof"
+
+# Indoor games are not exposed to the weather, so no forecast reading can make them
+# unsafe. This rule exists so an indoor question gets an honest, grounded answer rather
+# than falling through to "we have no guidance", and so it can affirm indoors as the
+# sensible choice when the outdoor picture is poor.
+#
+# The match is deliberately always-on for an indoor question: comfort_index is a
+# derived 0-100 composite, so `between [0, 100]` holds for every real snapshot while
+# still failing closed (no match, honest no-guidance) if the snapshot is incomplete.
+# There is no weather threshold to test, because indoors there is no weather exposure to
+# threshold against.
+match:
+  {field: comfort_index, op: between, value: [0, 100]}
+
+advice: |
+  Indoor games are under cover, so today's weather doesn't put you at any risk -- go
+  ahead and play.
+
+  If you were also weighing an outdoor option, the forecast may make indoors the more
+  comfortable choice. Keep the space ventilated if a lot of people are moving about, and
+  take water breaks as you would for any active play.
+
+compose_notes: >
+  This is reassurance, not a warning: give a clear go-ahead and do not manufacture
+  concern about an indoor activity. You may name one outdoor figure -- the heat, the
+  chance of rain -- if it makes indoors the more comfortable call, but keep the focus on
+  the go-ahead. Do not imply the weather affects the game itself.
+
+rationale: >
+  A weather-safety policy set that answers an indoor question with "no guidance" reads as
+  a gap rather than an answer. Because indoor activity carries no weather exposure, the
+  honest severity is informational and the rule fires unconditionally for indoor play,
+  giving a grounded go-ahead that can also point out when the outdoor alternative is the
+  less comfortable one.

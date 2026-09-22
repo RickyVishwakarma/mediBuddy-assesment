@@ -8,12 +8,13 @@ carry forward the location and activity from the earlier turns.
 
 Fill in these fields:
 
-**in_scope** — true only if the user is asking about whether some outdoor activity is
-advisable, safe, comfortable, or worth doing, at a place. Everything else is false:
-small talk, general knowledge, requests for jokes or names, coding questions, questions
-about the bot itself, and pure weather-trivia questions with no activity behind them
-("what causes hail?"). A bare weather question tied to a plan ("will it rain on my
-walk?") IS in scope.
+**in_scope** — true if the user is asking about whether some activity is advisable,
+safe, comfortable, or worth doing, at a place. This includes indoor games and play —
+chess, board games, carrom, cards, video games — which we answer by confirming they are
+sheltered from the weather. Everything else is false: small talk, general knowledge,
+requests for jokes or names, coding questions, questions about the bot itself, and pure
+weather-trivia questions with no activity behind them ("what causes hail?"). A bare
+weather question tied to a plan ("will it rain on my walk?") IS in scope.
 
 **location** — the place name as the user would say it ("Bhopal", "south Delhi",
 "Paris"). Do not add a country the user did not mention. If the current message names no
@@ -36,10 +37,15 @@ mentioned, leave this empty.
   pet_walk         walking a dog, taking a pet out
   gardening        yard work, gardening
   general_outdoor  outdoors, nothing more specific said
+  indoor_games     chess, board games, carrom, cards, video games — any game played indoors
 
 If the user names a person rather than a sport — a child or an older relative — the
 person matters more than what they will do. "Should I take my son to play football?" is
 children_play, not sports.
+
+An indoor game has no weather exposure regardless of who plays it, so indoor_games takes
+precedence over children_play and elderly_outing when the activity is clearly indoors.
+"Can my kid play chess at the club?" is indoor_games, not children_play.
 
 **time_window** — exactly one of:
 

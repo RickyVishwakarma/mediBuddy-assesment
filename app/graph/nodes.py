@@ -40,9 +40,10 @@ log = logging.getLogger(__name__)
 OUT_OF_SCOPE_TEXT = (
     "We don't have guidance covering that. Our advice only comes from written policies "
     "we maintain, and none of them apply to this question, so rather than guess I'd "
-    "rather tell you plainly that we can't help here. We cover outdoor activity safety "
-    "-- cycling, running, commuting, taking children or pets out, and similar plans -- "
-    "for a specific place and time, so ask about one of those and I'll check it."
+    "rather tell you plainly that we can't help here. We cover activity safety -- "
+    "cycling, running, commuting, taking children or pets out, indoor games, and "
+    "similar plans -- for a specific place and time, so ask about one of those and "
+    "I'll check it."
 )
 
 # In scope, location resolved, forecast in hand -- and no policy matched it. The honest

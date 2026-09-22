@@ -22,6 +22,7 @@ ACTIVITIES = [
     "pet_walk",
     "gardening",
     "general_outdoor",  # outdoors, nothing more specific stated
+    "indoor_games",     # a game played indoors, under a roof -- chess, board games, cards
 ]
 
 # Every field a policy may reference in a `field:` leaf. Anything not listed here does

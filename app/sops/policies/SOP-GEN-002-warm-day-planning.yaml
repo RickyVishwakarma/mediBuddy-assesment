@@ -5,7 +5,11 @@ severity: advisory
 override: false
 
 applies_to:
-  activities: ["*"]
+  # Outdoor activities only. A warm-day planning note about sun cover and pushing
+  # exertion to the cooler ends of the day is about outdoor exposure, so it must not
+  # attach to an indoor game -- SOP-IN-001 handles those.
+  activities: [cycling, motorcycle, running, walking, hiking, sports, commute, driving,
+               picnic, children_play, elderly_outing, pet_walk, gardening, general_outdoor]
   intent_hint: "any outdoor plan on a warm day that breaches no hazard threshold"
 
 # The all-clear (SOP-GEN-001) stops at 32 C apparent. Heat stress (SOP-EX-002) starts at

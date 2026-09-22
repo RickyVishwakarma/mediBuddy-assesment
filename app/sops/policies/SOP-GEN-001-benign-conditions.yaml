@@ -11,7 +11,11 @@ override: false
 only_if_alone: true
 
 applies_to:
-  activities: ["*"]
+  # Every outdoor activity, but NOT indoor ones: an all-clear about outdoor exposure
+  # ("go ahead as planned, sunscreen if you'll be out for hours") does not fit a game
+  # played under a roof, which SOP-IN-001 covers instead.
+  activities: [cycling, motorcycle, running, walking, hiking, sports, commute, driving,
+               picnic, children_play, elderly_outing, pet_walk, gardening, general_outdoor]
   intent_hint: "any outdoor plan on a day with nothing notable in the forecast"
 
 # The affirmative case. Without this, a genuinely pleasant day would fall through to

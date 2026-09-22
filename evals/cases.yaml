@@ -48,6 +48,27 @@ cases:
       lead_sop: SOP-VG-001
       numbers_grounded: true
 
+  - id: indoor_games_sheltered
+    checking: >
+      An indoor-activity question is admitted (not refused as out of scope at intent) and
+      answered from the indoor policy at info severity, rather than routed into an outdoor
+      rule. On a hot, high-UV day the honest answer is a grounded go-ahead: indoors
+      carries no weather exposure.
+    pass_means: >
+      Reaches the rule engine (does not stop at no_match_response), cites SOP-IN-001,
+      leads with it at info severity, does not cite the outdoor heat/UV rules, and every
+      number in the reply came from the API.
+    mode: fixture
+    fixture: high_uv
+    question: "Can the kids play chess indoors at home in Chennai this afternoon?"
+    checks:
+      must_cite: [SOP-IN-001]
+      lead_sop: SOP-IN-001
+      lead_severity: info
+      must_not_cite: [SOP-EX-001, SOP-VG-001, SOP-GEN-002]
+      must_not_reach: [no_match_response]
+      numbers_grounded: true
+
   # ---------------------------------------------------------------- paraphrase
   # These reuse none of the policy's own vocabulary. If matching were keyword lookup,
   # these would miss.
