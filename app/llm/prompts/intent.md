@@ -60,6 +60,12 @@ precedence over children_play and elderly_outing when the activity is clearly in
 part of the day people are usually still up and out for, and as **night** only when the
 message points later than that -- "late tonight", "tonight after midnight".
 
+**is_greeting** — true if the message is a bare greeting or social pleasantry with no
+question behind it: "hi", "hello", "good morning", "how are you?", "thanks!". Set it
+false the moment there is an actual activity question, even if the message opens with a
+greeting — "hi, is it safe to cycle in Bhopal?" is a real question (in_scope true), not a
+greeting. When is_greeting is true and no question is present, in_scope is false.
+
 **is_followup** — true if the current message depends on an earlier turn to make sense.
 
 **user_asserted_facts** — copy here, verbatim, any weather figure or claim about our

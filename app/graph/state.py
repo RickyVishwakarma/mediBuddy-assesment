@@ -33,6 +33,7 @@ class Intent(BaseModel):
     the intake step has no way to express an opinion about safety."""
 
     in_scope: bool = False
+    is_greeting: bool = False
     location: str = ""
     activity: str = "general_outdoor"
     time_window: str = "now"
@@ -46,6 +47,7 @@ class Intent(BaseModel):
         window = (self.time_window or "").strip().lower()
         return Intent(
             in_scope=self.in_scope,
+            is_greeting=self.is_greeting,
             location=(self.location or "").strip(),
             activity=activity if activity in ACTIVITIES else "general_outdoor",
             time_window=window if window in TIME_WINDOWS else "now",

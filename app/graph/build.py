@@ -1,6 +1,6 @@
 """Graph construction.
 
-Five conditional edges, three terminal response nodes, and one cycle
+Five conditional edges, four terminal response nodes, and one cycle
 (verify_grounding -> compose_answer). The cycle is the part a linear chain cannot
 express: retry the composition under a stricter prompt, and if it fails again leave by
 a different exit entirely.
@@ -45,6 +45,7 @@ def build_graph(checkpointer=None):
     g.add_node("verify_grounding", nodes.verify_grounding)
     g.add_node("deterministic_render", nodes.deterministic_render)
     g.add_node("no_match_response", nodes.no_match_response)
+    g.add_node("greeting_response", nodes.greeting_response)
     g.add_node("failure_response", nodes.failure_response)
 
     g.set_entry_point("parse_intent")
@@ -54,7 +55,8 @@ def build_graph(checkpointer=None):
     g.add_conditional_edges(
         "parse_intent",
         nodes.route_after_intent,
-        {"resolve": "resolve_location", "out_of_scope": "no_match_response", "fail": "failure_response"},
+        {"resolve": "resolve_location", "out_of_scope": "no_match_response",
+         "greeting": "greeting_response", "fail": "failure_response"},
     )
     g.add_conditional_edges(
         "resolve_location",
@@ -80,7 +82,8 @@ def build_graph(checkpointer=None):
         {"pass": END, "retry": "compose_answer", "fallback": "deterministic_render"},
     )
 
-    for terminal in ("deterministic_render", "no_match_response", "failure_response"):
+    for terminal in ("deterministic_render", "no_match_response", "greeting_response",
+                     "failure_response"):
         g.add_edge(terminal, END)
 
     return g.compile(checkpointer=checkpointer or _checkpointer())

@@ -296,7 +296,7 @@ to step 7 with a stricter prompt.
 
 ## Architecture
 
-**5 conditional edges, 4 terminal nodes, 1 cycle.** Emitted by
+**5 conditional edges, 5 terminal nodes, 1 cycle.** Emitted by
 `python -m app.graph.build --mermaid`, so it can't drift from the code.
 
 ```mermaid
@@ -304,6 +304,7 @@ graph TD
     START([turn]) --> PI[parse_intent<br/>LLM #1]
     PI -->|in scope| RL[resolve_location]
     PI -->|out of scope| NM[no_match_response]
+    PI -->|greeting| GR[greeting_response]
     RL -->|ok| FW[fetch_weather]
     RL -->|not found| FR[failure_response]
     FW -->|ok| BS[build_snapshot]
@@ -318,6 +319,7 @@ graph TD
     VG -->|fail 2nd| DR[deterministic_render]
     DR --> E
     NM --> E
+    GR --> E
     FR --> E
 ```
 
@@ -389,7 +391,7 @@ two turns can only disagree when conditions actually changed.
 ## How the guarantees are enforced
 
 **Cites a policy or says none applies.** `citations` is a first-class response field, not
-parsed out of prose. All four terminal nodes set it, or set `no_guidance`/`failed`.
+parsed out of prose. All five terminal nodes set it, or set `no_guidance`/`failed`.
 
 **Never a forecast it doesn't have.** `failure_response` makes no model call and never
 reads the snapshot — it cannot contain a forecast. Geocoding empty, geocoding error,

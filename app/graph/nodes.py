@@ -6,8 +6,8 @@ Division of labour, which is the thing to defend in review:
     compose_answer. Every other node is deterministic Python.
   * The router functions at the bottom contain no model call at all, so the LLM never
     decides which branch the graph takes.
-  * The three terminal responses for failure and no-match are fixed templates. They
-    cannot produce a forecast or a piece of advice even in principle.
+  * The four terminal responses for failure, no-match and greeting are fixed templates.
+    They cannot produce a forecast or a piece of advice even in principle.
 """
 
 from __future__ import annotations
@@ -58,6 +58,16 @@ NO_POLICY_TEXT = (
 NO_LOCATION_TEXT = (
     "I need to know where you are before I can check anything. Tell me the town or city "
     "and I'll look up the current forecast for it."
+)
+
+# A bare greeting or social pleasantry with no question behind it. Answering "we have no
+# guidance covering that" to "hi" is technically true and needlessly cold, so it gets its
+# own fixed template -- which, like every terminal, cannot invent advice or a forecast.
+GREETING_TEXT = (
+    "Hello! I'm a weather-advisory assistant. I can tell you whether an outdoor plan -- "
+    "or an indoor game -- is a good idea right now for a specific place, using the live "
+    "forecast and our written policies. Ask me something like \"is it safe to cycle in "
+    "Bhopal this afternoon?\" and I'll check it."
 )
 
 # Only `geocode` interpolates anything, and only the place name the user themselves
@@ -357,6 +367,24 @@ def no_match_response(state: AdvisoryState) -> dict:
     }
 
 
+def greeting_response(state: AdvisoryState) -> dict:
+    """Terminal: a fixed greeting. Reached only for a message that is purely social and
+    carries no activity question, so it never needs the weather or a policy.
+
+    It is not a failure and not a no-guidance answer -- both flags stay false so the UI
+    treats it as an ordinary conversational reply rather than flagging a gap.
+    """
+    body = GREETING_TEXT
+    return {
+        "final": body,
+        "citations": [],
+        "no_guidance": False,
+        "failed": False,
+        "messages": [AIMessage(content=body)],
+        "trace": ["greeting_response"],
+    }
+
+
 def failure_response(state: AdvisoryState) -> dict:
     """Terminal: a fixed template containing no weather figures at all."""
     failure = state.get("failure") or {"kind": "weather", "detail": "an unexpected error"}
@@ -380,6 +408,11 @@ def route_after_intent(state: AdvisoryState) -> str:
     if state.get("failure"):
         return "fail"
     intent = state.get("intent") or {}
+    # A pure greeting is out of scope too, but "hi" deserves a hello rather than the
+    # no-guidance template. A message that greets AND asks is in_scope, so it falls
+    # through to the real question below.
+    if intent.get("is_greeting") and not intent.get("in_scope"):
+        return "greeting"
     if not intent.get("in_scope"):
         return "out_of_scope"
     if not intent.get("location"):

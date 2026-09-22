@@ -4,7 +4,7 @@ How the graph is built, why it is shaped this way, and what each piece is for.
 Code: [`app/graph/`](app/graph/) — [`state.py`](app/graph/state.py) (74 lines),
 [`nodes.py`](app/graph/nodes.py) (329), [`build.py`](app/graph/build.py) (104).
 
-**Shape:** 11 nodes · 5 conditional edges · 4 terminal paths · 1 cycle.
+**Shape:** 12 nodes · 5 conditional edges · 5 terminal paths · 1 cycle.
 
 ---
 
@@ -18,6 +18,7 @@ graph TD
     START([user turn]) --> PI[parse_intent<br/>LLM #1]
     PI -->|in scope| RL[resolve_location]
     PI -->|out of scope| NM[no_match_response]
+    PI -->|greeting| GR[greeting_response]
     PI -->|model down| FR[failure_response]
     RL -->|resolved| FW[fetch_weather]
     RL -->|not found / error| FR
@@ -33,12 +34,13 @@ graph TD
     VG -->|fail, 2nd| DR[deterministic_render]
     DR --> E
     NM --> E
+    GR --> E
     FR --> E
 ```
 
 | Node | Deterministic? | Does |
 |---|---|---|
-| `parse_intent` | **LLM** | question → `{location, activity, time_window, is_followup, in_scope}` |
+| `parse_intent` | **LLM** | question → `{location, activity, time_window, is_followup, in_scope, is_greeting}` |
 | `resolve_location` | code | Open-Meteo geocoding; first candidate |
 | `fetch_weather` | code | forecast fetch; raw payload only, no interpretation |
 | `build_snapshot` | code | typed fact snapshot + derived fields |
@@ -48,6 +50,7 @@ graph TD
 | `verify_grounding` | code | the guard; can discard the model's output |
 | `deterministic_render` | code | policy text + snapshot, no model |
 | `no_match_response` | code | one of three fixed templates, chosen by how it arrived |
+| `greeting_response` | code | fixed greeting for a bare hello with no question behind it |
 | `failure_response` | code | fixed template, no weather figures possible |
 
 ---
@@ -138,7 +141,7 @@ The five branch points:
 
 | At | Outcomes |
 |---|---|
-| `parse_intent` | in scope · out of scope · model unavailable |
+| `parse_intent` | in scope · out of scope · greeting · model unavailable |
 | `resolve_location` | resolved · not found |
 | `fetch_weather` | ok · unavailable |
 | `match_sops` | matched · none |
@@ -252,7 +255,7 @@ Three answers, each pointing at code:
    `fetch_weather` both route to `failure_response`; you can see the honest-failure path in
    the topology.
 2. **The retry cycle cannot be expressed linearly.**
-3. **Five branch points, four exits.** `parse_intent` alone has three outcomes.
+3. **Five branch points, five exits.** `parse_intent` alone has four outcomes.
 
 A fourth, practical one: because nodes are thin adapters over layers that don't import the
 graph, the weather layer, rule engine and grounding guard were each built and tested

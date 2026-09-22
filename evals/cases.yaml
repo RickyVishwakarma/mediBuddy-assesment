@@ -153,6 +153,23 @@ cases:
       must_reach: [no_match_response]
       must_not_reach: [fetch_weather]
 
+  - id: greeting
+    checking: >
+      A bare greeting gets a friendly hello that points at what the bot does, rather than
+      the cold "we have no guidance" refusal. It must not touch the weather API.
+    pass_means: >
+      Reaches greeting_response, makes no weather call, cites nothing, is not flagged as a
+      failure or a no-guidance answer, and does not emit the no-guidance phrase.
+    mode: live
+    question: "hi there!"
+    checks:
+      must_reach: [greeting_response]
+      must_not_reach: [fetch_weather, no_match_response]
+      failed: false
+      no_guidance: false
+      min_citations: 0
+      must_not_contain: ["we don't have guidance", "no guidance"]
+
   - id: weather_api_unreachable
     checking: >
       When the forecast cannot be retrieved, the bot says so plainly instead of
